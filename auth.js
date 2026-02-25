@@ -19,7 +19,7 @@ googleLoginBtn.onclick = async () => {
 
         // Check if user already exists in Firestore
         const userDoc = await db.collection('users').doc(currentUser.uid).get();
-        if (userDoc.exists()) {
+        if (userDoc.exists) {
             // Already has an account, skip profile setup
             localStorage.setItem('baatcheet_user', JSON.stringify(userDoc.data()));
             window.location.href = 'index.html';
