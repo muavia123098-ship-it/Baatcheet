@@ -46,6 +46,12 @@ dpInput.onchange = (e) => {
 
 // Create Account Logic
 createAccountBtn.onclick = async () => {
+    if (!currentUser) {
+        alert("User session not found. Please login again.");
+        showStep(loginStep);
+        return;
+    }
+
     const name = document.getElementById('user-name').value.trim();
     const bio = document.getElementById('user-bio').value.trim();
 
@@ -59,24 +65,34 @@ createAccountBtn.onclick = async () => {
     const uniqueNumber = `0200${randomPart}`;
 
     try {
+        console.log("Attempting to save user data to Firestore...");
+
+        let photoURL = avatarPreview.src;
+        // Basic check for image size (Firestore limit is 1MB)
+        if (photoURL.length > 800000) {
+            alert("This image is too large. Please select a smaller photo or use the default.");
+            return;
+        }
+
         const userData = {
             uid: currentUser.uid,
             name: name,
             bio: bio,
-            photoURL: avatarPreview.src, // Base64 for now, ideally upload to Storage
+            photoURL: photoURL,
             baatcheetNumber: uniqueNumber,
             email: currentUser.email,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
         await db.collection('users').doc(currentUser.uid).set(userData);
+        console.log("User data saved successfully!");
 
         localStorage.setItem('baatcheet_user', JSON.stringify(userData));
         generatedNumberSpan.innerText = uniqueNumber;
         showStep(successStep);
     } catch (error) {
-        console.error("Failed to save profile", error);
-        alert("Error saving profile: " + error.message);
+        console.error("Detailed Error:", error);
+        alert("Error saving profile: " + error.message + "\n\nTip: Make sure Firestore Rules are set to 'test mode' or 'allow all' for now.");
     }
 };
 

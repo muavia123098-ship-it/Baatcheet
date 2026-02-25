@@ -14,12 +14,14 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <header class="header">
-                <img src="https://ui-avatars.com/api/?name=User&background=d32f2f&color=fff" alt="User"
-                    class="user-img">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img id="user-main-img" src="" alt="User" class="user-img">
+                    <span id="my-number-display" style="font-size: 13px; color: var(--text-secondary);"></span>
+                </div>
                 <div class="header-icons">
                     <i class="fas fa-circle-notch"></i>
                     <i class="fas fa-comment-alt"></i>
-                    <i class="fas fa-ellipsis-v"></i>
+                    <i class="fas fa-sign-out-alt" id="logout-btn" title="Logout"></i>
                 </div>
             </header>
 

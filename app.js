@@ -1,8 +1,22 @@
-// Check if user is logged in
 const userData = JSON.parse(localStorage.getItem('baatcheet_user'));
 if (!userData) {
     window.location.href = 'login.html';
 }
+
+// Populate Sidebar Header
+document.getElementById('user-main-img').src = userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name}&background=d32f2f&color=fff`;
+document.getElementById('user-main-img').title = `My Number: ${userData.baatcheetNumber}`;
+if (document.getElementById('my-number-display')) {
+    document.getElementById('my-number-display').innerText = userData.baatcheetNumber;
+}
+
+// Logout Logic
+document.getElementById('logout-btn').onclick = () => {
+    localStorage.removeItem('baatcheet_user');
+    auth.signOut().then(() => {
+        window.location.href = 'login.html';
+    });
+};
 
 let activeChatId = null;
 let activeChatData = null;
