@@ -1,16 +1,17 @@
-// Logic to add contacts by Baatcheet Number
-async function addContactByNumber(number) {
+// Logic to add contacts by Baatcheet Number with validation
+async function addContactByNumber(number, customName) {
     if (number === userData.baatcheetNumber) {
         alert("You cannot add yourself!");
         return;
     }
 
     try {
+        console.log("Searching for user:", number);
         const usersRef = db.collection('users');
         const snapshot = await usersRef.where('baatcheetNumber', '==', number).get();
 
         if (snapshot.empty) {
-            alert("No user found with this number!");
+            alert("Ye number Baatcheet par exist nahi karta! (Number not found)");
             return;
         }
 
@@ -21,34 +22,84 @@ async function addContactByNumber(number) {
         const convRef = db.collection('conversations').doc(convId);
         const convDoc = await convRef.get();
 
-        if (!convDoc.exists()) {
+        if (!convDoc.exists) {
             await convRef.set({
                 participants: [userData.uid, targetUser.uid],
                 participantsData: [
                     { uid: userData.uid, name: userData.name, photoURL: userData.photoURL },
-                    { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL }
+                    { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL, nickname: customName }
                 ],
                 lastMessage: '',
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
+        } else {
+            // Optional: Update nickname if conversation already exists? 
+            // For now just alert it exists
+            alert("Contact pehle se mojood he!");
+            return;
         }
 
-        alert(`Contact ${targetUser.name} added!`);
-        // The chat list will auto-update due to onSnapshot in app.js
+        alert(`Contact ${customName} added successfully!`);
+        closeAddContactModal();
     } catch (error) {
         console.error("Error adding contact:", error);
-        alert("Failed to add contact.");
+        alert("Failed to add contact: " + error.message);
     }
 }
 
-// Hook into Search UI if it starts with '0200'
-const searchInput = document.getElementById('chat-search');
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const val = searchInput.value.trim();
-        if (val.startsWith('0200') && val.length === 10) {
-            addContactByNumber(val);
-            searchInput.value = '';
-        }
+// Modal Toggle Logic
+const modal = document.getElementById('add-contact-modal');
+const closeBtn = document.getElementById('close-modal');
+const saveBtn = document.getElementById('save-contact-btn');
+const numberInput = document.getElementById('new-contact-number');
+const nameInput = document.getElementById('new-contact-name');
+
+function openAddContactModal() {
+    modal.classList.remove('hidden');
+    document.getElementById('main-menu').classList.add('hidden');
+}
+
+function closeAddContactModal() {
+    modal.classList.add('hidden');
+    numberInput.value = '';
+    nameInput.value = '';
+}
+
+closeBtn.onclick = closeAddContactModal;
+
+saveBtn.onclick = () => {
+    const num = numberInput.value.trim();
+    const name = nameInput.value.trim();
+
+    if (num.length !== 10 || !num.startsWith('0200')) {
+        alert("Valid 10-digit number starting with 0200 enter karein.");
+        return;
     }
-});
+
+    if (!name) {
+        alert("Please enter a name for this contact.");
+        return;
+    }
+
+    addContactByNumber(num, name);
+};
+
+// Menu Logic
+document.getElementById('menu-btn').onclick = (e) => {
+    e.stopPropagation();
+    document.getElementById('main-menu').classList.toggle('hidden');
+};
+
+document.getElementById('add-contact-menu').onclick = openAddContactModal;
+
+document.getElementById('logout-menu').onclick = () => {
+    localStorage.removeItem('baatcheet_user');
+    auth.signOut().then(() => {
+        window.location.href = 'login.html';
+    });
+};
+
+// Close menu on click outside
+window.onclick = () => {
+    document.getElementById('main-menu').classList.add('hidden');
+};

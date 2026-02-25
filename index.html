@@ -20,8 +20,14 @@
                 </div>
                 <div class="header-icons">
                     <i class="fas fa-circle-notch"></i>
-                    <i class="fas fa-comment-alt"></i>
-                    <i class="fas fa-sign-out-alt" id="logout-btn" title="Logout"></i>
+                    <i class="fas fa-comment-alt" title="New Chat"></i>
+                    <div class="menu-container">
+                        <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
+                        <div id="main-menu" class="dropdown-menu hidden">
+                            <div class="dropdown-item" id="add-contact-menu">Add Contact</div>
+                            <div class="dropdown-item" id="logout-menu">Logout</div>
+                        </div>
+                    </div>
                 </div>
             </header>
 
@@ -38,9 +44,10 @@
         </aside>
 
         <!-- Main Chat Area -->
-        <main class="main-chat">
+        <main class="main-chat" id="main-chat">
             <header class="chat-header">
                 <div class="chat-header-info">
+                    <i class="fas fa-arrow-left back-btn" id="back-btn"></i>
                     <img src="https://ui-avatars.com/api/?name=Chat&background=202c33&color=fff" alt="Chat"
                         class="user-img" id="active-chat-img">
                     <div>
@@ -71,6 +78,27 @@
                 <i class="fas fa-microphone footer-btn" id="send-btn"></i>
             </footer>
         </main>
+    </div>
+
+    <!-- Add Contact Modal -->
+    <div id="add-contact-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Add New Contact</h2>
+            <div class="form-group">
+                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Baatcheet
+                    Number</label>
+                <input type="text" id="new-contact-number" placeholder="e.g. 0200123456">
+            </div>
+            <div class="form-group">
+                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Contact
+                    Name</label>
+                <input type="text" id="new-contact-name" placeholder="Name to save as">
+            </div>
+            <div class="modal-footer">
+                <button class="primary-btn" style="background:#333;width:auto" id="close-modal">Cancel</button>
+                <button class="primary-btn" style="width:auto" id="save-contact-btn">Save Contact</button>
+            </div>
+        </div>
     </div>
 
     <!-- Firebase SDKs -->
