@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Baatcheet</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body class="login-body">
+    <div class="login-container">
+        <!-- Step 1: Google Login -->
+        <div id="login-step" class="auth-card">
+            <div class="auth-header">
+                <i class="fas fa-comments logo-red"></i>
+                <h1>Welcome to Baatcheet</h1>
+                <p>Same to same WhatsApp, but better.</p>
+            </div>
+            <button id="google-login-btn" class="google-btn">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                <span>Sign in with Google</span>
+            </button>
+        </div>
+
+        <!-- Step 2: Profile Setup -->
+        <div id="profile-step" class="auth-card hidden">
+            <div class="auth-header">
+                <h1>Set up your Profile</h1>
+                <p>Tell us a bit about yourself.</p>
+            </div>
+
+            <div class="profile-pic-container">
+                <div class="profile-pic-preview">
+                    <img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=d32f2f&color=fff"
+                        alt="Avatar">
+                    <label for="dp-input" class="upload-btn">
+                        <i class="fas fa-camera"></i>
+                    </label>
+                </div>
+                <input type="file" id="dp-input" accept="image/*" class="hidden">
+            </div>
+
+            <div class="form-group">
+                <input type="text" id="user-name" placeholder="Your Name" required>
+            </div>
+            <div class="form-group">
+                <textarea id="user-bio" placeholder="About / Bio (Optional)"></textarea>
+            </div>
+
+            <button id="create-account-btn" class="primary-btn">Create Account</button>
+        </div>
+
+        <!-- Step 3: Success & Number -->
+        <div id="success-step" class="auth-card hidden">
+            <div class="auth-header">
+                <i class="fas fa-check-circle success-icon"></i>
+                <h1>Account Created!</h1>
+                <p>Your unique Baatcheet number is:</p>
+                <div class="unique-number" id="generated-number">0200-XXXXXX</div>
+            </div>
+            <button id="start-chatting-btn" class="primary-btn">Start Chatting</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script src="firebase-config.js"></script>
+    <script src="auth.js"></script>
+</body>
+
+</html>

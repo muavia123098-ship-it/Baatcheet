@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baatcheet - Messenger</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <header class="header">
+                <img src="https://ui-avatars.com/api/?name=User&background=d32f2f&color=fff" alt="User"
+                    class="user-img">
+                <div class="header-icons">
+                    <i class="fas fa-circle-notch"></i>
+                    <i class="fas fa-comment-alt"></i>
+                    <i class="fas fa-ellipsis-v"></i>
+                </div>
+            </header>
+
+            <div class="search-container">
+                <div class="search-bar">
+                    <i class="fas fa-search" style="color: var(--text-secondary);"></i>
+                    <input type="text" id="chat-search" placeholder="Search or start new chat">
+                </div>
+            </div>
+
+            <div class="chat-list" id="chat-list">
+                <!-- Chat items will be injected by JS -->
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main-chat">
+            <header class="chat-header">
+                <div class="chat-header-info">
+                    <img src="https://ui-avatars.com/api/?name=Chat&background=202c33&color=fff" alt="Chat"
+                        class="user-img" id="active-chat-img">
+                    <div>
+                        <div class="chat-item-name" id="active-chat-name">Select a chat</div>
+                        <div class="chat-item-time" id="active-chat-status" style="font-size: 13px;">Online</div>
+                    </div>
+                </div>
+                <div class="header-icons">
+                    <i class="fas fa-search"></i>
+                    <i class="fas fa-ellipsis-v"></i>
+                </div>
+            </header>
+
+            <div class="chat-body" id="chat-body">
+                <!-- Messages will be injected by JS -->
+                <div class="message received"
+                    style="align-self: center; background: rgba(0,0,0,0.3); color: var(--text-secondary); border-radius: 8px; margin-top: 20px;">
+                    Welcome to Baatcheet! Select a contact to start chatting.
+                </div>
+            </div>
+
+            <footer class="chat-footer">
+                <i class="far fa-smile footer-btn"></i>
+                <i class="fas fa-paperclip footer-btn"></i>
+                <div class="input-area">
+                    <input type="text" id="message-input" placeholder="Type a message">
+                </div>
+                <i class="fas fa-microphone footer-btn" id="send-btn"></i>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script src="firebase-config.js"></script>
+    <script src="contacts.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

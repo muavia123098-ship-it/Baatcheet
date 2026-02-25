@@ -1,0 +1,15 @@
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyAN0NNuReeVE9iOko3HuzelguN5iZd1ovU",
+    authDomain: "baatcheet-5f212.firebaseapp.com",
+    projectId: "baatcheet-5f212",
+    storageBucket: "baatcheet-5f212.firebasestorage.app",
+    messagingSenderId: "448231224685",
+    appId: "1:448231224685:web:2b82c11dba9c66bd8f9664"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const provider = new firebase.auth.GoogleAuthProvider();
