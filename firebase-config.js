@@ -13,3 +13,11 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const provider = new firebase.auth.GoogleAuthProvider();
+
+// Global User Data
+window.userData = JSON.parse(localStorage.getItem('baatcheet_user'));
+
+// Global check for login (only on app pages, not login.html)
+if (!window.userData && !window.location.href.includes('login.html')) {
+    window.location.href = 'login.html';
+}

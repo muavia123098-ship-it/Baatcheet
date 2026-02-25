@@ -1,13 +1,10 @@
-const userData = JSON.parse(localStorage.getItem('baatcheet_user'));
-if (!userData) {
-    window.location.href = 'login.html';
-}
-
 // Populate Sidebar Header
-document.getElementById('user-main-img').src = userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name}&background=d32f2f&color=fff`;
-document.getElementById('user-main-img').title = `My Number: ${userData.baatcheetNumber}`;
-if (document.getElementById('my-number-display')) {
-    document.getElementById('my-number-display').innerText = userData.baatcheetNumber;
+if (userData) {
+    document.getElementById('user-main-img').src = userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name}&background=d32f2f&color=fff`;
+    document.getElementById('user-main-img').title = `My Number: ${userData.baatcheetNumber}`;
+    if (document.getElementById('my-number-display')) {
+        document.getElementById('my-number-display').innerText = userData.baatcheetNumber;
+    }
 }
 
 // Logout Logic
@@ -33,51 +30,71 @@ const activeChatStatus = document.getElementById('active-chat-status');
 
 // 1. Listen for Conversations (Chat List)
 function listenForChats() {
+    console.log("Listening for chats for user UID:", userData.uid);
     db.collection('conversations')
         .where('participants', 'array-contains', userData.uid)
         .onSnapshot(snapshot => {
+            console.log("Chat Snapshot received. Docs count:", snapshot.docs.length);
             chats = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
             renderChatList();
+        }, error => {
+            console.error("Chat Listener Error:", error);
         });
 }
 
 // 2. Render Chat List
 function renderChatList(filter = '') {
+    console.log("Rendering Chat List. Total chats:", chats.length, "Filter:", filter);
     chatList.innerHTML = '';
-    chats.sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0))
+
+    const filteredChats = chats
         .filter(chat => {
             const otherParticipant = getOtherParticipant(chat);
-            return otherParticipant.name.toLowerCase().includes(filter.toLowerCase());
+            const nameToSearch = (otherParticipant.nickname || otherParticipant.name || 'Unknown').toLowerCase();
+            return nameToSearch.includes(filter.toLowerCase());
         })
-        .forEach(chat => {
-            const other = getOtherParticipant(chat);
-            const div = document.createElement('div');
-            div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
-            div.onclick = () => selectChat(chat);
+        .sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
 
-            const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    if (filteredChats.length === 0 && chats.length > 0) {
+        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No contacts match your search.</div>';
+    } else if (chats.length === 0) {
+        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Add a contact to start chatting!</div>';
+    }
 
-            div.innerHTML = `
-                <img src="${other.photoURL || 'https://ui-avatars.com/api/?name=' + other.name + '&background=d32f2f&color=fff'}" class="chat-item-img">
-                <div class="chat-item-info">
-                    <div class="chat-item-top">
-                        <span class="chat-item-name">${other.name}</span>
-                        <span class="chat-item-time">${time}</span>
-                    </div>
-                    <div class="chat-item-msg">${chat.lastMessage || 'Start a conversation'}</div>
+    filteredChats.forEach(chat => {
+        const other = getOtherParticipant(chat);
+        const div = document.createElement('div');
+        div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
+        div.onclick = () => selectChat(chat);
+
+        const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+        div.innerHTML = `
+            <img src="${other.photoURL || 'https://ui-avatars.com/api/?name=' + other.name + '&background=d32f2f&color=fff'}" class="chat-item-img">
+            <div class="chat-item-info">
+                <div class="chat-item-top">
+                    <span class="chat-item-name">${other.nickname || other.name}</span>
+                    <span class="chat-item-time">${time}</span>
                 </div>
-            `;
-            chatList.appendChild(div);
-        });
+                <div class="chat-item-msg">${chat.lastMessage || 'Start a conversation'}</div>
+            </div>
+        `;
+        chatList.appendChild(div);
+    });
 }
 
 // Helper to get the other person in the chat
 function getOtherParticipant(chat) {
     if (chat.participantsData) {
-        return chat.participantsData.find(p => p.uid !== userData.uid) || { name: 'Unknown' };
+        // Find the participant that is NOT me
+        const other = chat.participantsData.find(p => p.uid !== userData.uid);
+        if (other) {
+            // Check if the contact object has a nickname key directly (from Firestore)
+            return other;
+        }
     }
     return { name: 'Unknown' };
 }
@@ -87,13 +104,44 @@ function selectChat(chat) {
     activeChatId = chat.id;
     activeChatData = chat;
     const other = getOtherParticipant(chat);
-    activeChatName.innerText = other.name;
+    activeChatName.innerText = other.nickname || other.name;
     activeChatImg.src = other.photoURL || `https://ui-avatars.com/api/?name=${other.name}&background=d32f2f&color=fff`;
     activeChatStatus.innerText = 'Online';
 
+    // Mobile View Toggle
+    document.querySelector('.sidebar').classList.add('hide-mobile');
+    document.querySelector('.main-chat').classList.add('show-mobile');
+
     renderChatList();
     listenForMessages();
+    // Mark incoming messages as read when chat is opened
+    markMessagesAsRead(chat.id);
 }
+
+// Mark all unread messages from the other person as read
+async function markMessagesAsRead(chatId) {
+    try {
+        const unreadSnap = await db.collection('conversations').doc(chatId)
+            .collection('messages')
+            .where('senderId', '!=', userData.uid)
+            .where('read', '==', false)
+            .get();
+
+        const batch = db.batch();
+        unreadSnap.docs.forEach(doc => {
+            batch.update(doc.ref, { read: true });
+        });
+        await batch.commit();
+    } catch (e) {
+        console.warn('markMessagesAsRead error:', e.message);
+    }
+}
+
+// Mobile Back Button
+document.getElementById('back-btn').onclick = () => {
+    document.querySelector('.sidebar').classList.remove('hide-mobile');
+    document.querySelector('.main-chat').classList.remove('show-mobile');
+};
 
 // 4. Listen for Messages
 let messageListener = null;
@@ -108,18 +156,37 @@ function listenForMessages() {
             chatBody.innerHTML = '';
             snapshot.docs.forEach(doc => {
                 const msg = doc.data();
+                const isSent = msg.senderId === userData.uid;
                 const div = document.createElement('div');
-                div.className = `message ${msg.senderId === userData.uid ? 'sent' : 'received'}`;
+                div.className = `message ${isSent ? 'sent' : 'received'}`;
 
-                const timeStr = msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...';
+                const timeStr = msg.timestamp
+                    ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '...';
+
+                // Tick logic:
+                //   No tick        = received message (not mine)
+                //   Single grey ✓  = sent, not yet read
+                //   Double red ✓✓  = sent & read by recipient
+                let tickHtml = '';
+                if (isSent) {
+                    if (msg.read) {
+                        tickHtml = '<i class="fas fa-check-double" style="color:#d32f2f;margin-left:5px;"></i>';
+                    } else {
+                        tickHtml = '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
+                    }
+                }
 
                 div.innerHTML = `
                     ${msg.text}
-                    <div class="msg-time">${timeStr} ${msg.senderId === userData.uid ? '<i class="fas fa-check-double" style="color: #53bdeb; margin-left: 5px;"></i>' : ''}</div>
+                    <div class="msg-time">${timeStr}${tickHtml}</div>
                 `;
                 chatBody.appendChild(div);
             });
             chatBody.scrollTop = chatBody.scrollHeight;
+
+            // Auto-mark incoming as read while the chat is open
+            markMessagesAsRead(activeChatId);
         });
 }
 
@@ -132,11 +199,12 @@ async function sendMessage() {
 
         const timestamp = firebase.firestore.FieldValue.serverTimestamp();
 
-        // Add message to subcollection
+        // Add message to subcollection (read:false by default)
         await db.collection('conversations').doc(activeChatId).collection('messages').add({
             text: text,
             senderId: userData.uid,
-            timestamp: timestamp
+            timestamp: timestamp,
+            read: false
         });
 
         // Update conversation metadata

@@ -33,10 +33,21 @@ async function addContactByNumber(number, customName) {
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
         } else {
-            // Optional: Update nickname if conversation already exists? 
-            // For now just alert it exists
-            alert("Contact pehle se mojood he!");
-            return;
+            // Fix for previous bug: If conversation exists but participants are corrupted
+            const data = convDoc.data();
+            if (!data.participants.includes(userData.uid)) {
+                console.log("Fixing corrupted participants array...");
+                await convRef.update({
+                    participants: [userData.uid, targetUser.uid],
+                    participantsData: [
+                        { uid: userData.uid, name: userData.name, photoURL: userData.photoURL },
+                        { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL, nickname: customName }
+                    ]
+                });
+            } else {
+                alert("Contact pehle se mojood he!");
+                return;
+            }
         }
 
         alert(`Contact ${customName} added successfully!`);
