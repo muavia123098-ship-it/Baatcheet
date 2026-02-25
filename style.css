@@ -494,9 +494,9 @@ body {
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.85);
-    display: flex !important;
-    justify-content: center !important;
-    align-items: center !important;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     z-index: 9999 !important;
 }
 
