@@ -8,12 +8,15 @@ if (userData) {
 }
 
 // Logout Logic
-document.getElementById('logout-btn').onclick = () => {
-    localStorage.removeItem('baatcheet_user');
-    auth.signOut().then(() => {
-        window.location.href = 'login.html';
-    });
-};
+const logoutBtn = document.getElementById('logout-menu');
+if (logoutBtn) {
+    logoutBtn.onclick = () => {
+        localStorage.removeItem('baatcheet_user');
+        auth.signOut().then(() => {
+            window.location.href = 'login.html';
+        });
+    };
+}
 
 let activeChatId = null;
 let activeChatData = null;
@@ -88,15 +91,15 @@ function renderChatList(filter = '') {
 
 // Helper to get the other person in the chat
 function getOtherParticipant(chat) {
-    if (chat.participantsData) {
+    if (chat.participantsData && userData) {
         // Find the participant that is NOT me
         const other = chat.participantsData.find(p => p.uid !== userData.uid);
         if (other) {
-            // Check if the contact object has a nickname key directly (from Firestore)
             return other;
         }
     }
-    return { name: 'Unknown' };
+    // If no participant found (e.g. chat with yourself or corrupted data)
+    return chat.participantsData ? chat.participantsData[0] : { name: 'Unknown' };
 }
 
 // 3. Select Chat
