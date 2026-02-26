@@ -156,6 +156,30 @@ document.getElementById('back-btn').onclick = () => {
     if (callBtn) callBtn.style.display = 'none';
 };
 
+// Notification Permissions
+async function requestNotificationPermission() {
+    if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        console.log('Notification permission:', permission);
+    }
+}
+
+// Show Background Notification
+function showCallNotification(callerName) {
+    if (Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.showNotification('Baatcheet Incoming Call', {
+                body: `${callerName} is calling you...`,
+                icon: 'logo.png',
+                tag: 'incoming-call',
+                renotify: true,
+                requireInteraction: true,
+                vibrate: [200, 100, 200]
+            });
+        });
+    }
+}
+
 // 4. Listen for Messages
 let messageListener = null;
 function listenForMessages() {

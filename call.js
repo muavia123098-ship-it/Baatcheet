@@ -28,6 +28,7 @@ const muteBtn = document.getElementById('mute-btn');
 const speakerBtn = document.getElementById('speaker-btn');
 const localAudio = document.getElementById('local-audio');
 const remoteAudio = document.getElementById('remote-audio');
+const ringtoneAudio = document.getElementById('ringtone-audio');
 const callStatus = document.getElementById('call-status');
 
 // Call State
@@ -37,7 +38,14 @@ let isSpeakerOn = true;
 // Initialize Media Channels
 async function setupLocalStream() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
         localAudio.srcObject = localStream;
 
         remoteStream = new MediaStream();
@@ -171,6 +179,16 @@ function listenForCalls() {
                     const callData = change.doc.data();
                     currentCallId = change.doc.id;
 
+                    // Play Ringtone
+                    if (ringtoneAudio) {
+                        ringtoneAudio.play().catch(e => console.log("Audio play failed:", e));
+                    }
+
+                    // Show Notification
+                    if (typeof showCallNotification === 'function') {
+                        showCallNotification(callData.callerName || "Someone");
+                    }
+
                     // Show incoming call UI
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
                     document.getElementById('incoming-caller-img').src = callData.callerPhoto;
@@ -298,6 +316,11 @@ function endCallUI() {
     }
     if (speakerBtn) {
         speakerBtn.classList.remove('active');
+    }
+
+    if (ringtoneAudio) {
+        ringtoneAudio.pause();
+        ringtoneAudio.currentTime = 0;
     }
 
     // Reset UI
