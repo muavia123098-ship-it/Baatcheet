@@ -11,10 +11,18 @@ if (userData) {
 const logoutBtn = document.getElementById('logout-menu');
 if (logoutBtn) {
     logoutBtn.onclick = () => {
-        localStorage.removeItem('baatcheet_user');
         auth.signOut().then(() => {
             window.location.href = 'login.html';
         });
+    };
+}
+
+// Enable Notifications from Menu
+const enableNotificationsBtn = document.getElementById('enable-notifications');
+if (enableNotificationsBtn) {
+    enableNotificationsBtn.onclick = () => {
+        requestNotificationPermission();
+        settingsMenu.classList.add('hidden');
     };
 }
 

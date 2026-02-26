@@ -202,6 +202,13 @@ function listenForCalls() {
                 if (change.type === 'removed') {
                     // Caller cancelled before pickup
                     if (!activeCallModal.classList.contains('hidden')) return; // Already answered
+
+                    // Stop Ringtone
+                    if (ringtoneAudio) {
+                        ringtoneAudio.pause();
+                        ringtoneAudio.currentTime = 0;
+                    }
+
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
                 }
@@ -216,6 +223,12 @@ async function answerCall(callId) {
     incomingCallModal.classList.add('hidden');
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Connecting...";
+
+    // Stop Ringtone if answering
+    if (ringtoneAudio) {
+        ringtoneAudio.pause();
+        ringtoneAudio.currentTime = 0;
+    }
 
     try {
         await setupLocalStream();
