@@ -27,6 +27,10 @@ const activeChatStatus = document.getElementById('active-chat-status');
 // 1. Listen for Conversations (Chat List)
 function listenForChats() {
     const userData = window.userData;
+    if (!userData || !userData.uid) {
+        console.error("Cannot listen for chats: No user session found.");
+        return;
+    }
     console.log("Listening for chats for user UID:", userData.uid);
     window.db.collection('conversations')
         .where('participants', 'array-contains', userData.uid)
@@ -36,9 +40,11 @@ function listenForChats() {
                 id: doc.id,
                 ...doc.data()
             }));
+            console.log("Chats array updated:", chats);
             renderChatList();
         }, error => {
             console.error("Chat Listener Error:", error);
+            alert("Chat listener failed: " + error.message);
         });
 }
 
@@ -56,9 +62,9 @@ function renderChatList(filter = '') {
         .sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
 
     if (filteredChats.length === 0 && chats.length > 0) {
-        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">No contacts match your search.</div>';
+        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--primary-red); font-weight: bold;">No contacts match your filter.</div>';
     } else if (chats.length === 0) {
-        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Add a contact to start chatting!</div>';
+        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Aapka chat list khaali hai. Contact add karein!</div>';
     }
 
     filteredChats.forEach(chat => {
@@ -70,9 +76,10 @@ function renderChatList(filter = '') {
         const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
         div.innerHTML = `
+            <img src="${other.photoURL || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png'}" class="chat-item-img" onerror="this.src='https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png'">
             <div class="chat-item-info">
                 <div class="chat-item-top">
-                    <span class="chat-item-name">${other.nickname || other.name}</span>
+                    <span class="chat-item-name">${other.nickname || other.name || 'Unknown'}</span>
                     <span class="chat-item-time">${time}</span>
                 </div>
                 <div class="chat-item-msg">${chat.lastMessage || 'Start a conversation'}</div>
@@ -85,14 +92,16 @@ function renderChatList(filter = '') {
 // Helper to get the other person in the chat
 function getOtherParticipant(chat) {
     const userData = window.userData;
-    if (chat.participantsData && userData) {
+    if (chat && chat.participantsData && userData && userData.uid) {
         // Find the participant that is NOT me
-        const other = chat.participantsData.find(p => p.uid !== userData.uid); if (other) {
-            return other;
-        }
+        const other = chat.participantsData.find(p => p.uid !== userData.uid);
+        if (other) return other;
     }
-    // If no participant found (e.g. chat with yourself or corrupted data)
-    return chat.participantsData ? chat.participantsData[0] : { name: 'Unknown' };
+    // Fallback logic
+    if (chat && chat.participantsData && chat.participantsData.length > 0) {
+        return chat.participantsData[0];
+    }
+    return { name: 'Unknown', photoURL: '' };
 }
 
 // 3. Select Chat
