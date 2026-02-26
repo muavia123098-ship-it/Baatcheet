@@ -110,6 +110,13 @@ document.getElementById('logout-menu').onclick = () => {
     });
 };
 
+document.getElementById('enable-notifications').onclick = () => {
+    if (typeof requestNotificationPermission === 'function') {
+        requestNotificationPermission();
+    }
+    document.getElementById('main-menu').classList.add('hidden');
+};
+
 // Close menu on click outside
 window.onclick = () => {
     document.getElementById('main-menu').classList.add('hidden');
