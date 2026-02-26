@@ -1,4 +1,6 @@
 // Populate Sidebar Header
+const userData = window.userData;
+
 if (userData) {
     if (document.getElementById('my-name-display')) {
         document.getElementById('my-name-display').innerText = userData.name;

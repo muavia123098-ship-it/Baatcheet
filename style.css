@@ -804,20 +804,20 @@ body {
         display: block !important;
         margin-right: 15px;
         font-size: 20px;
-        cursor: pointer;
     }
 }
 
+/* Back Button (Desktop Default) */
 .back-btn {
-    display: block;
-    cursor: pointer;
+    display: none;
+    font-size: 20px;
     margin-right: 15px;
-    font-size: 18px;
+    cursor: pointer;
     color: var(--text-secondary);
 }
 
 .back-btn:hover {
-    color: white;
+    color: var(--text-primary);
 }
 
 /* Voice Recording Overlay */
