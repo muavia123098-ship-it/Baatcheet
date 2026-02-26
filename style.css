@@ -292,13 +292,14 @@ body {
 
 /* Selected Message Highlight */
 .message.selected {
-    background-color: rgba(0, 168, 132, 0.2) !important;
+    background-color: rgba(211, 47, 47, 0.3) !important;
 }
 
 /* Ensure children don't steal clicks during selection */
-body.selection-active .message * {
-    pointer-events: none !important;
+.message * {
+    pointer-events: none;
 }
+
 
 body.selection-active .message {
     cursor: pointer;
@@ -970,8 +971,8 @@ body.selection-active .message {
     left: 0;
     width: 100%;
     height: 100%;
-    background: #008069;
-    /* WhatsApp dark teal for selection */
+    background: var(--primary-red);
+    /* Red header for selection */
     display: flex;
     align-items: center;
     justify-content: space-between;

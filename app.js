@@ -44,8 +44,6 @@ function initDOMRefs() {
     // Attach local listeners with high priority
     if (nodes.messageInput) {
         const handleInput = () => {
-            updateSendBtnIcon();
-
             // Typing indicator logic
             if (!isCurrentlyTyping) {
                 isCurrentlyTyping = true;
@@ -76,13 +74,7 @@ function initDOMRefs() {
         };
     }
     if (nodes.sendBtn) {
-        nodes.sendBtn.onclick = () => {
-            if (nodes.sendBtn.classList.contains('fa-paper-plane')) {
-                sendMessage();
-            } else {
-                startRecording();
-            }
-        };
+        nodes.sendBtn.onclick = sendMessage;
     }
     if (nodes.backBtn) nodes.backBtn.onclick = closeChat;
 
@@ -96,7 +88,7 @@ function initDOMRefs() {
         };
     }
 
-    // Voice Recording Listeners
+    // Voice Recording Listeners (Removed)
     if (nodes.chatBody) {
         nodes.chatBody.onclick = (e) => {
             if (!isSelectionMode) return;
@@ -108,9 +100,6 @@ function initDOMRefs() {
             }
         };
     }
-    if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.onclick = stopRecording;
-    if (nodes.deleteRecordingBtn) nodes.deleteRecordingBtn.onclick = cancelRecording;
-    if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.onclick = uploadAndSendAudio;
 
     // Selection/Delete Listeners
     if (nodes.cancelSelectionBtn) nodes.cancelSelectionBtn.onclick = exitSelectionMode;
@@ -140,6 +129,11 @@ window.auth.onAuthStateChanged(user => {
             updateHeaderUI();
             listenForChats(user.uid);
             listenForCalls();
+
+            // Midnight cleanup check
+            checkAndRunDailyCleanup();
+            // Check every hour just in case they keep the tab open overnight
+            setInterval(checkAndRunDailyCleanup, 60 * 60 * 1000);
         }, 500);
     } else {
         console.warn("App Init: No user, auth-config should redirect...");
@@ -566,18 +560,36 @@ function listenForMessages() {
                     div.className = `message call-log`;
                     let iconClass = 'fa-phone';
                     let iconColor = '#8696a0'; // Default
-                    let callText = 'Voice Call';
+                    let callText = msg.text || 'Voice Call';
 
-                    const isICalled = msg.callerId === userData.uid;
-                    const isIMissed = msg.callStatus === 'missed';
+                    // Debugging info (hidden in console)
+                    console.log(`Rendering Call Log [${msg.id}]:`, {
+                        callerId: msg.callerId,
+                        myUid: userData.uid,
+                        status: msg.callStatus,
+                        text: msg.text
+                    });
 
-                    if (isIMissed) {
-                        iconClass = 'fa-phone-slash';
-                        iconColor = '#f15c6d'; // Missed Red
-                        callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
-                    } else {
-                        iconColor = '#34B7F1'; // Answered Blue
-                        callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
+                    if (msg.callerId) {
+                        const isICalled = msg.callerId === userData.uid;
+                        const isIMissed = msg.callStatus === 'missed';
+
+                        if (isIMissed) {
+                            iconClass = 'fa-phone-slash';
+                            iconColor = '#f15c6d'; // Missed Red
+                            callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
+                        } else {
+                            iconColor = '#34B7F1'; // Answered Blue
+                            callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
+                        }
+                    } else if (msg.text) {
+                        // Fallback for legacy logs
+                        if (msg.text.toLowerCase().includes('missed')) {
+                            iconClass = 'fa-phone-slash';
+                            iconColor = '#f15c6d';
+                        } else {
+                            iconColor = '#34B7F1';
+                        }
                     }
 
                     const timeStr = msg.timestamp
@@ -703,20 +715,7 @@ async function sendMessage() {
     }
 }
 
-// UI Handlers
-function updateSendBtnIcon() {
-    const mInput = nodes.messageInput || document.getElementById('message-input');
-    const sBtn = nodes.sendBtn || document.getElementById('send-btn');
-    if (!sBtn || !mInput) return;
-
-    if (mInput.value.trim() !== '') {
-        sBtn.classList.remove('fa-microphone');
-        sBtn.classList.add('fa-paper-plane', 'send-btn');
-    } else {
-        sBtn.classList.remove('fa-paper-plane', 'send-btn');
-        sBtn.classList.add('fa-microphone');
-    }
-}
+// UI Handlers (updateSendBtnIcon removed)
 
 // --- Emoji Picker Logic ---
 function initEmojiPicker() {
@@ -740,7 +739,6 @@ function initEmojiPicker() {
                 const mInput = nodes.messageInput || document.getElementById('message-input');
                 if (mInput) {
                     mInput.value += emoji.innerText;
-                    updateSendBtnIcon();
                     mInput.focus();
                 }
             };
@@ -758,166 +756,7 @@ function formatDuration(seconds) {
     return `${secs}s`;
 }
 
-// --- Voice Recording Logic ---
-// We use window.currentUser if defined in auth.js
-let mediaRecorder = null;
-let audioChunks = [];
-let recordingTimerInterval = null;
-let recordedAudioBlob = null;
-let recordingStartTime = 0;
-
-// --- Selection Mode Logic ---
-let isSelectionMode = false;
-let selectedMessages = new Set(); // Stores message IDs
-let longPressTimeout = null;
-
-async function startRecording() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = () => {
-            recordedAudioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
-            stream.getTracks().forEach(track => track.stop());
-
-            // Show Send, Hide Stop
-            if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.classList.add('hidden');
-            if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.classList.remove('hidden');
-        };
-
-        mediaRecorder.start();
-        recordingStartTime = Date.now();
-        startTimer();
-
-        if (nodes.recordingOverlay) nodes.recordingOverlay.classList.remove('hidden');
-        if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.classList.remove('hidden');
-        if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.classList.add('hidden');
-    } catch (err) {
-        console.error("Microphone access denied:", err);
-        alert("Microphone access chahiye recording ke liye!");
-    }
-}
-
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-        stopTimer();
-    }
-}
-
-function cancelRecording() {
-    stopRecording();
-    if (nodes.recordingOverlay) nodes.recordingOverlay.classList.add('hidden');
-    recordedAudioBlob = null;
-    audioChunks = [];
-}
-
-async function uploadAndSendAudio() {
-    if (!recordedAudioBlob || !activeChatId) {
-        console.warn("Upload aborted: No blob or activeChatId", { recordedAudioBlob, activeChatId });
-        return;
-    }
-
-    console.log("Starting voice recording upload...", { size: recordedAudioBlob.size, type: recordedAudioBlob.type });
-
-    try {
-        if (nodes.sendRecordingBtn) {
-            nodes.sendRecordingBtn.classList.add('fa-spinner', 'fa-spin');
-            nodes.sendRecordingBtn.classList.remove('fa-paper-plane');
-        }
-
-        const fileName = `audio_${Date.now()}.webm`;
-        // Explicitly child() for safety
-        const storageRef = window.storage.ref().child(`audio_notes/${activeChatId}/${fileName}`);
-
-        console.log("Uploading to storage path:", storageRef.fullPath);
-
-        const uploadTask = storageRef.put(recordedAudioBlob);
-
-        uploadTask.on('state_changed',
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                console.log('Voice Upload: ' + Math.round(progress) + '% done');
-            },
-            (error) => {
-                console.error("Upload Error:", error);
-                alert("Upload nakam raha: " + error.message);
-                resetUploadUI();
-            },
-            async () => {
-                try {
-                    const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
-                    console.log("Upload success! URL:", downloadURL);
-
-                    const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
-                    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
-
-                    await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
-                        type: 'audio',
-                        audioUrl: downloadURL,
-                        senderId: window.userData.uid,
-                        timestamp: timestamp,
-                        read: false
-                    });
-
-                    const updateData = {
-                        lastMessage: '🎤 Voice Message',
-                        lastUpdate: timestamp
-                    };
-                    if (other && other.uid) {
-                        updateData[`unread_${other.uid}`] = true;
-                    }
-
-                    await window.db.collection('conversations').doc(activeChatId).update(updateData);
-
-                    // Reset typing
-                    isCurrentlyTyping = false;
-                    setTypingStatus(false);
-
-                    console.log("Firestore success!");
-                    cancelRecording();
-                } catch (err) {
-                    console.error("Firestore update failed:", err);
-                    alert("Message record nahi ho saka: " + err.message);
-                } finally {
-                    resetUploadUI();
-                }
-            }
-        );
-    } catch (err) {
-        console.error("Critical Upload Error:", err);
-        alert("Audio send nahi ho saka!");
-        resetUploadUI();
-    }
-}
-
-function resetUploadUI() {
-    if (nodes.sendRecordingBtn) {
-        nodes.sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
-        nodes.sendRecordingBtn.classList.add('fa-paper-plane');
-    }
-}
-
-function startTimer() {
-    if (nodes.recordingTimer) nodes.recordingTimer.innerText = "00:00";
-    recordingTimerInterval = setInterval(() => {
-        const diff = Date.now() - recordingStartTime;
-        const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
-        const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-        if (nodes.recordingTimer) nodes.recordingTimer.innerText = `${mins}:${secs}`;
-    }, 1000);
-}
-
-function stopTimer() {
-    clearInterval(recordingTimerInterval);
-}
-
-// Voice Event Handlers are now in initDOMRefs
+// Voice Recording Logic Removed
 
 // --- Message Selection & Deletion Functions ---
 // Elements are now in nodes cache
@@ -1032,6 +871,68 @@ async function confirmDeleteForEveryone() {
 
 function closeDeleteModal() {
     if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.add('hidden');
+}
+
+// --- Midnight Cleanup Logic ---
+async function checkAndRunDailyCleanup() {
+    if (!window.userData) return;
+
+    const lastCleanupKey = `lastCleanupDate_${window.userData.uid}`;
+    const lastCleanupDate = localStorage.getItem(lastCleanupKey);
+    const now = new Date();
+
+    // Format: YYYY-MM-DD
+    const todayStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+
+    console.log(`Checking daily cleanup... Last: ${lastCleanupDate}, Today: ${todayStr}`);
+
+    if (lastCleanupDate !== todayStr) {
+        console.log("Midnight passed or new day. Running chat cleanup...");
+        await deleteAllChatsLocallyAndRemotely();
+        localStorage.setItem(lastCleanupKey, todayStr);
+    }
+}
+
+async function deleteAllChatsLocallyAndRemotely() {
+    if (!chats || chats.length === 0) {
+        console.log("No chats to clean up.");
+        return;
+    }
+
+    try {
+        console.log(`Attempting to delete ${chats.length} active conversations...`);
+
+        for (const chat of chats) {
+            const convRef = window.db.collection('conversations').doc(chat.id);
+            const msgsRef = convRef.collection('messages');
+
+            // 1. Delete all messages in the subcollection
+            const msgsSnapshot = await msgsRef.get();
+            if (!msgsSnapshot.empty) {
+                const batch = window.db.batch();
+                msgsSnapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                console.log(`Deleted ${msgsSnapshot.size} messages from chat ${chat.id}`);
+            }
+
+            // 2. Delete the conversation document itself
+            await convRef.delete();
+            console.log(`Deleted conversation document ${chat.id}`);
+        }
+
+        // 3. Clear local state and UI
+        chats = [];
+        activeChatId = null;
+        activeChatData = null;
+        renderChatList();
+        closeChat();
+
+        console.log("Daily chat cleanup completed successfully.");
+    } catch (err) {
+        console.error("Failed to run daily chat cleanup:", err);
+    }
 }
 
 // Redundant listeners removed (handled in initDOMRefs)

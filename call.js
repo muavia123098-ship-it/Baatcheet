@@ -285,11 +285,6 @@ async function answerCall(callId) {
         callStatus.innerText = "Connected";
         callStatus.style.color = "#00a884";
 
-        // Add Call Log to Chat (Single entry for answered call)
-        if (window.userData.uid === callData.receiverId) {
-            addCallLog('answered', callData.callerId, null, callData.callerId, callData.receiverId);
-        }
-
         // Listen for caller ICE candidates
         offerCandidates.onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
@@ -328,7 +323,7 @@ async function endCall() {
     }
 
     if (duration > 0 && otherParticipantId) {
-        // Log the duration. Only one user needs to do this, ideally caller on disconnect.
+        // Log the duration. Only the caller will log the 'answered' call to avoid duplicates.
         if (window.amICaller) {
             addCallLog('answered', otherParticipantId, duration, window.userData.uid, otherParticipantId);
         }
