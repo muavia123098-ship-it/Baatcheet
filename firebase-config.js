@@ -16,10 +16,31 @@ window.db = firebase.firestore();
 window.storage = firebase.storage();
 window.provider = new firebase.auth.GoogleAuthProvider();
 
-// Global User Data
+// Global User Data (Initially from localStorage for quick UI load, but verified by Auth)
 window.userData = JSON.parse(localStorage.getItem('baatcheet_user'));
 
 // Global check for login (only on app pages, not login.html)
 if (!window.userData && !window.location.href.includes('login.html')) {
     window.location.href = 'login.html';
 }
+
+// Ensure window.userData is refreshed from Firebase Auth as a source of truth
+window.auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        // Double check Firestore for latest user metadata
+        try {
+            const userDoc = await window.db.collection('users').doc(user.uid).get();
+            if (userDoc.exists) {
+                window.userData = userDoc.data();
+                localStorage.setItem('baatcheet_user', JSON.stringify(window.userData));
+                console.log("Auth State: User logic session active for", window.userData.name);
+            }
+        } catch (e) {
+            console.error("Auth State sync error:", e);
+        }
+    } else if (!window.location.href.includes('login.html')) {
+        console.warn("Auth State: No user found, redirecting...");
+        localStorage.removeItem('baatcheet_user');
+        window.location.href = 'login.html';
+    }
+});

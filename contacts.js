@@ -111,6 +111,10 @@ document.getElementById('logout-menu').onclick = () => {
     });
 };
 
+document.getElementById('refresh-app-menu').onclick = () => {
+    location.reload();
+};
+
 document.getElementById('enable-notifications').onclick = () => {
     if (typeof requestNotificationPermission === 'function') {
         requestNotificationPermission();

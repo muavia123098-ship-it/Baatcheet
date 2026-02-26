@@ -1,39 +1,61 @@
-// Populate Sidebar Header
-// window.userData is provided by firebase-config.js. We use a local shorthand if needed.
-(function () {
-    const uData = window.userData;
-    if (uData) {
-        if (document.getElementById('my-name-display')) {
-            document.getElementById('my-name-display').innerText = uData.name;
-        }
-        if (document.getElementById('my-number-display')) {
-            document.getElementById('my-number-display').innerText = uData.baatcheetNumber;
-        }
-    }
-})();
-
+// ---------------- Initialization & Global State ----------------
 let activeChatId = null;
 let activeChatData = null;
 let chats = [];
-// DOM Elements
-const chatList = document.getElementById('chat-list');
-const chatBody = document.getElementById('chat-body');
-const messageInput = document.getElementById('message-input');
-const sendBtn = document.getElementById('send-btn');
-const activeChatName = document.getElementById('active-chat-name');
-const activeChatImg = document.getElementById('active-chat-img');
-const activeChatStatus = document.getElementById('active-chat-status');
+let presenceListener = null;
+let messageListener = null;
+
+// DOM Cache
+let nodes = {};
+
+function initDOMRefs() {
+    nodes = {
+        chatList: document.getElementById('chat-list'),
+        chatBody: document.getElementById('chat-body'),
+        messageInput: document.getElementById('message-input'),
+        sendBtn: document.getElementById('send-btn'),
+        activeChatName: document.getElementById('active-chat-name'),
+        activeChatStatus: document.getElementById('active-chat-status'),
+        myNameDisplay: document.getElementById('my-name-display'),
+        myNumberDisplay: document.getElementById('my-number-display'),
+        backBtn: document.getElementById('back-btn')
+    };
+}
+
+function updateHeaderUI() {
+    const uData = window.userData;
+    if (uData) {
+        if (nodes.myNameDisplay) nodes.myNameDisplay.innerText = uData.name || 'User';
+        if (nodes.myNumberDisplay) nodes.myNumberDisplay.innerText = uData.baatcheetNumber || '';
+    }
+}
+
+// Global Initialization
+window.auth.onAuthStateChanged(user => {
+    initDOMRefs();
+    if (user) {
+        console.log("App Init: Auth confirmed for", user.uid);
+        // Wait briefly for firestore-config to sync latest window.userData
+        setTimeout(() => {
+            updateHeaderUI();
+            listenForChats(user.uid);
+            listenForCalls();
+        }, 500);
+    } else {
+        console.warn("App Init: No user, auth-config should redirect...");
+    }
+});
 
 // 1. Listen for Conversations (Chat List)
-function listenForChats() {
-    const userData = window.userData;
-    if (!userData || !userData.uid) {
-        console.error("Cannot listen for chats: No user session found.");
+function listenForChats(authUid) {
+    const uid = authUid || (window.userData ? window.userData.uid : null);
+    if (!uid) {
+        console.error("Cannot listen for chats: No user UID found.");
         return;
     }
-    console.log("Listening for chats for user UID:", userData.uid);
+    console.log("Listening for chats for user UID:", uid);
     window.db.collection('conversations')
-        .where('participants', 'array-contains', userData.uid)
+        .where('participants', 'array-contains', uid)
         .onSnapshot(snapshot => {
             console.log("Chat Snapshot received. Docs count:", snapshot.docs.length);
             chats = snapshot.docs.map(doc => ({
@@ -48,10 +70,10 @@ function listenForChats() {
         });
 }
 
-// 2. Render Chat List
 function renderChatList(filter = '') {
+    if (!nodes.chatList) return;
     console.log("Rendering Chat List. Total chats:", chats.length, "Filter:", filter);
-    chatList.innerHTML = '';
+    nodes.chatList.innerHTML = '';
 
     const filteredChats = chats
         .filter(chat => {
@@ -61,10 +83,18 @@ function renderChatList(filter = '') {
         })
         .sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
 
-    if (filteredChats.length === 0 && chats.length > 0) {
-        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--primary-red); font-weight: bold;">No contacts match your filter.</div>';
-    } else if (chats.length === 0) {
-        chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">Aapka chat list khaali hai. Contact add karein!</div>';
+    if (chats.length === 0) {
+        nodes.chatList.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                <p>Aapka chat list khaali hai.</p>
+                <small style="color:var(--primary-red)">Tip: 'Add Contact' menu se kisi ko add karein.</small>
+            </div>`;
+        return;
+    }
+
+    if (filteredChats.length === 0) {
+        nodes.chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--primary-red); font-weight: bold;">No contacts match your filter.</div>';
+        return;
     }
 
     filteredChats.forEach(chat => {
@@ -85,7 +115,7 @@ function renderChatList(filter = '') {
                 <div class="chat-item-msg">${chat.lastMessage || 'Start a conversation'}</div>
             </div>
         `;
-        chatList.appendChild(div);
+        nodes.chatList.appendChild(div);
     });
 }
 
@@ -111,7 +141,7 @@ function selectChat(chat) {
     activeChatData = chat;
 
     const other = getOtherParticipant(chat);
-    activeChatName.innerText = other.nickname || other.name;
+    if (nodes.activeChatName) nodes.activeChatName.innerText = other.nickname || other.name;
 
     // Listen for other person's presence
     listenForOtherPresence(other.uid);
@@ -123,12 +153,13 @@ function selectChat(chat) {
     const chatFooter = document.querySelector('.chat-footer');
     if (chatFooter) chatFooter.style.display = 'flex';
 
-    const chatBody = document.getElementById('chat-body');
-    if (chatBody) chatBody.classList.remove('hidden');
+    if (nodes.chatBody) nodes.chatBody.classList.remove('hidden');
 
     // Mobile View Toggle
-    document.querySelector('.sidebar').classList.add('hide-mobile');
-    document.querySelector('.main-chat').classList.add('show-mobile');
+    const sidebar = document.querySelector('.sidebar');
+    const mainChat = document.querySelector('.main-chat');
+    if (sidebar) sidebar.classList.add('hide-mobile');
+    if (mainChat) mainChat.classList.add('show-mobile');
 
     renderChatList();
     listenForMessages();
@@ -148,9 +179,9 @@ function closeChat() {
     }
 
     // Reset UI
-    activeChatName.innerText = 'Select a chat';
-    activeChatStatus.innerText = '';
-    chatBody.innerHTML = '';
+    if (nodes.activeChatName) nodes.activeChatName.innerText = 'Select a chat';
+    if (nodes.activeChatStatus) nodes.activeChatStatus.innerText = '';
+    if (nodes.chatBody) nodes.chatBody.innerHTML = '';
 
     // Unsubscribe presence listener
     if (presenceListener) {
@@ -165,15 +196,18 @@ function closeChat() {
     if (chatFooter) chatFooter.style.display = 'none';
 
     // Toggle Mobile view back
-    document.querySelector('.sidebar').classList.remove('hide-mobile');
-    document.querySelector('.main-chat').classList.remove('show-mobile');
+    const sidebar = document.querySelector('.sidebar');
+    const mainChat = document.querySelector('.main-chat');
+    if (sidebar) sidebar.classList.remove('hide-mobile');
+    if (mainChat) mainChat.classList.remove('show-mobile');
 
-    exitSelectionMode();
+    if (typeof exitSelectionMode === 'function') exitSelectionMode();
     renderChatList();
 }
 
-let presenceListener = null;
+// Helper functions for presence
 function listenForOtherPresence(otherUid) {
+    if (!nodes.activeChatStatus) return;
     if (presenceListener) presenceListener();
 
     presenceListener = window.db.collection('users').doc(otherUid)
@@ -181,13 +215,13 @@ function listenForOtherPresence(otherUid) {
             const data = doc.data();
             if (data) {
                 if (data.status === 'online') {
-                    activeChatStatus.innerText = 'Online';
+                    nodes.activeChatStatus.innerText = 'Online';
                 } else if (data.lastSeen) {
                     const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
                     const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    activeChatStatus.innerText = `Last seen at ${timeStr}`;
+                    nodes.activeChatStatus.innerText = `Last seen at ${timeStr}`;
                 } else {
-                    activeChatStatus.innerText = 'Offline';
+                    nodes.activeChatStatus.innerText = 'Offline';
                 }
             }
         });
@@ -213,8 +247,11 @@ async function markMessagesAsRead(chatId) {
     }
 }
 
-// Back Button Logic (All devices)
-document.getElementById('back-btn').onclick = closeChat;
+window.onload = () => {
+    initDOMRefs();
+    if (nodes.backBtn) nodes.backBtn.onclick = closeChat;
+    document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
+};
 
 // Notification Permissions
 async function requestNotificationPermission() {
@@ -320,7 +357,6 @@ function showCallNotification(callerName) {
 }
 
 // 4. Listen for Messages
-let messageListener = null;
 function listenForMessages() {
     const userData = window.userData;
     if (messageListener) messageListener(); // Unsubscribe previous

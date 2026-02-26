@@ -31,6 +31,7 @@
                             <div class="dropdown-item" id="profile-menu">Profile</div>
                             <div class="dropdown-item" id="add-contact-menu">Add Contact</div>
                             <div class="dropdown-item" id="enable-notifications">Enable Notifications</div>
+                            <div class="dropdown-item" id="refresh-app-menu">Refresh App</div>
                             <div class="dropdown-item" id="logout-menu">Logout</div>
                         </div>
                     </div>
@@ -45,7 +46,10 @@
             </div>
 
             <div class="chat-list" id="chat-list">
-                <!-- Chat items will be injected by JS -->
+                <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 10px;"></i>
+                    <p>Loading chats...</p>
+                </div>
             </div>
         </aside>
 
