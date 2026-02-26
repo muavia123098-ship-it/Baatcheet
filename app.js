@@ -272,3 +272,16 @@ document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.
 // Start
 listenForChats();
 listenForCalls();
+
+// Attach the call event
+const mainCallBtn = document.getElementById('call-btn');
+if (mainCallBtn) {
+    mainCallBtn.onclick = () => {
+        if (activeChatData) {
+            const other = getOtherParticipant(activeChatData);
+            if (other && other.uid) {
+                startCall(other.uid);
+            }
+        }
+    };
+}

@@ -284,12 +284,3 @@ function endCallUI() {
 if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
 if (declineCallBtn) declineCallBtn.onclick = () => endCall();
 if (endCallBtn) endCallBtn.onclick = () => endCall();
-
-// Bind Call Button (if in chat room)
-if (callBtn) {
-    callBtn.onclick = () => {
-        if (activeChatData && activeChatData.otherUserId) {
-            startCall(activeChatData.otherUserId);
-        }
-    }
-}
