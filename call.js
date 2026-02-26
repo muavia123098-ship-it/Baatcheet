@@ -89,7 +89,6 @@ async function startCall(receiverId) {
     }
 
     document.getElementById('active-call-name').innerText = callName;
-    document.getElementById('active-call-img').src = callPhoto;
 
     try {
         await setupLocalStream();
@@ -120,7 +119,6 @@ async function startCall(receiverId) {
             offer,
             callerId: userData.uid,
             callerName: userData.name,
-            callerPhoto: userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name}&background=d32f2f&color=fff`,
             receiverId: receiverId,
             status: "ringing",
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -182,6 +180,19 @@ function listenForCalls() {
                     // Play Ringtone
                     if (ringtoneAudio) {
                         ringtoneAudio.play().catch(e => console.log("Audio play failed:", e));
+
+                        // Set Media Session Metadata (Styles the Android notification)
+                        if ('mediaSession' in navigator) {
+                            navigator.mediaSession.metadata = new MediaMetadata({
+                                title: 'Incoming Call',
+                                artist: callData.callerName || 'Baatcheet',
+                                album: 'Baatcheet Messenger',
+                                artwork: [
+                                    { src: callData.callerPhoto || 'logo.png', sizes: '96x96', type: 'image/png' },
+                                    { src: callData.callerPhoto || 'logo.png', sizes: '512x512', type: 'image/png' }
+                                ]
+                            });
+                        }
                     }
 
                     // Show Notification
@@ -191,12 +202,10 @@ function listenForCalls() {
 
                     // Show incoming call UI
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
-                    document.getElementById('incoming-caller-img').src = callData.callerPhoto;
                     incomingCallModal.classList.remove('hidden');
 
                     // Setup active mode UI for later
                     document.getElementById('active-call-name').innerText = callData.callerName;
-                    document.getElementById('active-call-img').src = callData.callerPhoto;
                 }
 
                 if (change.type === 'removed') {
@@ -208,6 +217,9 @@ function listenForCalls() {
                         ringtoneAudio.pause();
                         ringtoneAudio.currentTime = 0;
                     }
+
+                    // Log Missed Call
+                    addCallLog('missed', callData.callerId);
 
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
@@ -268,6 +280,9 @@ async function answerCall(callId) {
 
         callStatus.innerText = "Connected";
         callStatus.style.color = "#00a884";
+
+        // Add Call Log to Chat
+        addCallLog('answered', callData.callerId);
 
         // Listen for caller ICE candidates
         offerCandidates.onSnapshot((snapshot) => {
@@ -336,6 +351,11 @@ function endCallUI() {
         ringtoneAudio.currentTime = 0;
     }
 
+    // Clear Media Session
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+    }
+
     // Reset UI
     activeCallModal.classList.add('hidden');
     incomingCallModal.classList.add('hidden');
@@ -385,3 +405,28 @@ if (speakerBtn) {
 if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
 if (declineCallBtn) declineCallBtn.onclick = () => endCall();
 if (endCallBtn) endCallBtn.onclick = () => endCall();
+// Helper to add call record to chat
+async function addCallLog(type, otherUserId) {
+    if (!userData || !otherUserId) return;
+    const convId = [userData.uid, otherUserId].sort().join('_');
+    const text = type === 'missed' ? 'Missed Voice Call' : 'Voice Call';
+
+    try {
+        await db.collection('conversations').doc(convId).collection('messages').add({
+            text: text,
+            senderId: userData.uid,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            type: 'call',
+            callType: type, // 'answered' or 'missed'
+            read: true
+        });
+
+        // Also update last message in conversation
+        await db.collection('conversations').doc(convId).update({
+            lastMessage: text,
+            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    } catch (e) {
+        console.error("Error adding call log:", e);
+    }
+}

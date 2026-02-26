@@ -19,13 +19,16 @@
         <aside class="sidebar">
             <header class="header">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <img id="user-main-img" src="" alt="User" class="user-img">
-                    <span id="my-number-display" style="font-size: 13px; color: var(--text-secondary);"></span>
+                    <div style="display: flex; flex-direction: column;">
+                        <span id="my-name-display" style="font-weight: 500; font-size: 15px;"></span>
+                        <span id="my-number-display" style="font-size: 12px; color: var(--text-secondary);"></span>
+                    </div>
                 </div>
                 <div class="header-icons">
                     <div class="menu-container">
                         <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
                         <div id="main-menu" class="dropdown-menu hidden">
+                            <div class="dropdown-item" id="profile-menu">Profile</div>
                             <div class="dropdown-item" id="add-contact-menu">Add Contact</div>
                             <div class="dropdown-item" id="enable-notifications">Enable Notifications</div>
                             <div class="dropdown-item" id="logout-menu">Logout</div>
@@ -49,13 +52,22 @@
         <!-- Main Chat Area -->
         <main class="main-chat" id="main-chat">
             <header class="chat-header">
-                <div class="chat-header-info">
+                <!-- Selection Mode Header (Overlay) -->
+                <div id="selection-header" class="selection-header hidden">
+                    <div class="selection-info">
+                        <i class="fas fa-times" id="cancel-selection-btn" title="Cancel"></i>
+                        <span id="selection-count">1</span>
+                    </div>
+                    <div class="selection-actions">
+                        <i class="fas fa-trash" id="delete-selected-btn" title="Delete Selected"></i>
+                    </div>
+                </div>
+
+                <div class="contact-info">
                     <i class="fas fa-arrow-left back-btn" id="back-btn"></i>
-                    <img src="https://ui-avatars.com/api/?name=Chat&background=202c33&color=fff" alt="Chat"
-                        class="user-img" id="active-chat-img">
-                    <div>
-                        <div class="chat-item-name" id="active-chat-name">Select a chat</div>
-                        <div class="chat-item-time" id="active-chat-status" style="font-size: 13px;">Online</div>
+                    <div class="chat-header-info">
+                        <div id="active-chat-name" class="chat-name">Select a chat</div>
+                        <div id="active-chat-status" class="chat-status"></div>
                     </div>
                 </div>
                 <div class="header-icons">
@@ -72,8 +84,21 @@
                 </div>
             </div>
 
-            <footer class="chat-footer">
-                <div style="position: relative;">
+            <footer class="chat-footer" style="display: none;">
+                <!-- Voice Recording Overlay -->
+                <div id="recording-overlay" class="recording-overlay hidden">
+                    <div class="recording-info">
+                        <i class="fas fa-microphone recording-mic-icon"></i>
+                        <span id="recording-timer">00:00</span>
+                    </div>
+                    <div class="recording-actions">
+                        <i class="fas fa-trash-alt recording-btn delete-recording" id="delete-recording-btn"></i>
+                        <i class="fas fa-stop-circle recording-btn stop-recording" id="stop-recording-btn"></i>
+                        <i class="fas fa-paper-plane recording-btn send-recording hidden" id="send-recording-btn"></i>
+                    </div>
+                </div>
+
+                <div class="footer-icons" style="position: relative;">
                     <i class="far fa-smile footer-btn" id="emoji-btn"></i>
 
                     <!-- Emoji Picker Popup -->
@@ -100,6 +125,26 @@
         </main>
     </div>
 
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h3>Edit Profile</h3>
+                <i class="fas fa-times" id="close-profile-modal"></i>
+            </header>
+            <div class="modal-body profile-edit-body">
+                <div class="input-group">
+                    <label>Your Name</label>
+                    <input type="text" id="edit-profile-name" placeholder="Enter your name">
+                </div>
+            </div>
+            <footer class="modal-footer">
+                <button class="wa-action-btn accept" id="save-profile-btn" style="width: 100%; border-radius: 8px;">Save
+                    Changes</button>
+            </footer>
+        </div>
+    </div>
+
     <!-- Add Contact Modal -->
     <div id="add-contact-modal" class="modal-overlay hidden">
         <div class="modal">
@@ -123,14 +168,10 @@
 
     <!-- Incoming Call Modal -->
     <div id="incoming-call-modal" class="wa-call-screen hidden">
-        <div class="wa-call-header">
-            <div class="wa-call-status">Baatcheet Audio Call</div>
-            <div id="incoming-caller-name" class="wa-caller-name">Caller Name</div>
+        <div class="wa-call-content">
+            <div class="wa-call-status">Incoming Voice Call</div>
+            <div class="wa-caller-name" id="incoming-caller-name">Someone</div>
         </div>
-
-        <img id="incoming-caller-img" src="https://ui-avatars.com/api/?name=Caller&background=202c33&color=fff"
-            alt="Caller" class="wa-caller-img">
-
         <div class="wa-call-actions">
             <button class="wa-action-btn btn-reject" id="decline-call-btn" title="Decline">
                 <i class="fas fa-phone-slash"></i>
@@ -145,12 +186,9 @@
     <!-- Active Call Modal -->
     <div id="active-call-modal" class="wa-call-screen hidden">
         <div class="wa-call-header">
-            <div id="call-status" class="wa-call-status">Calling...</div>
-            <div id="active-call-name" class="wa-caller-name">User Name</div>
+            <div class="wa-call-status" id="call-status">Ringing...</div>
+            <div class="wa-caller-name" id="active-call-name">Contact Name</div>
         </div>
-
-        <img id="active-call-img" src="https://ui-avatars.com/api/?name=User&background=202c33&color=fff" alt="User"
-            class="wa-caller-img">
 
         <audio id="local-audio" autoplay muted></audio>
         <audio id="remote-audio" autoplay></audio>
@@ -175,6 +213,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 
     <script src="firebase-config.js"></script>
     <script src="contacts.js"></script>

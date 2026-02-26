@@ -117,6 +117,18 @@ document.getElementById('enable-notifications').onclick = () => {
     document.getElementById('main-menu').classList.add('hidden');
 };
 
+const profileModal = document.getElementById('profile-modal');
+document.getElementById('profile-menu').onclick = () => {
+    if (typeof openProfileModal === 'function') {
+        openProfileModal();
+    }
+    document.getElementById('main-menu').classList.add('hidden');
+};
+
+document.getElementById('close-profile-modal').onclick = () => {
+    profileModal.classList.add('hidden');
+};
+
 // Close menu on click outside
 window.onclick = () => {
     document.getElementById('main-menu').classList.add('hidden');

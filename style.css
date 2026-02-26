@@ -236,6 +236,103 @@ body {
     border-top-left-radius: 0;
 }
 
+/* Call Log styling - Centered system message */
+.message.call-log {
+    align-self: center;
+    background-color: #182229;
+    color: #8696a0;
+    max-width: 80%;
+    margin: 10px auto;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+    box-shadow: none;
+    border: none;
+}
+
+.message.call-log i {
+    margin-right: 5px;
+    font-size: 12px;
+}
+
+.message.call-log.missed {
+    color: #f44336;
+}
+
+/* Selected Message Highlight */
+.message.selected {
+    background-color: rgba(244, 67, 54, 0.2) !important;
+}
+
+.message {
+    cursor: pointer;
+    user-select: none;
+    /* Prevent text selection during long press/click */
+}
+
+/* Audio Message Styling */
+.audio-msg {
+    min-width: 250px;
+    padding: 8px 12px !important;
+}
+
+.audio-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 5px 0;
+}
+
+.play-btn {
+    font-size: 24px;
+    color: #8696a0;
+    cursor: pointer;
+    width: 30px;
+    text-align: center;
+}
+
+.sent .play-btn {
+    color: #fff;
+}
+
+.audio-waveform {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+}
+
+.mic-icon-circle {
+    width: 28px;
+    height: 28px;
+    background: rgba(134, 150, 160, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #8696a0;
+}
+
+.sent .mic-icon-circle {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.audio-dummy-bar {
+    height: 3px;
+    background: #8696a0;
+    flex-grow: 1;
+    border-radius: 2px;
+    opacity: 0.5;
+}
+
+.sent .audio-dummy-bar {
+    background: #fff;
+}
+
 .msg-time {
     font-size: 10px;
     color: var(--text-secondary);
@@ -712,7 +809,192 @@ body {
 }
 
 .back-btn {
-    display: none;
+    display: block;
+    cursor: pointer;
+    margin-right: 15px;
+    font-size: 18px;
+    color: var(--text-secondary);
+}
+
+.back-btn:hover {
+    color: white;
+}
+
+/* Voice Recording Overlay */
+.recording-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 10;
+    border-radius: 8px;
+    animation: slideInBottom 0.2s ease-out;
+}
+
+.recording-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.recording-mic-icon {
+    color: #f44336;
+    animation: pulseMic 1s infinite alternate;
+}
+
+#recording-timer {
+    font-family: monospace;
+}
+
+.recording-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.recording-btn {
+    font-size: 20px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.recording-btn:hover {
+    transform: scale(1.1);
+}
+
+.delete-recording {
+    color: #8696a0;
+}
+
+.stop-recording {
+    color: #f44336;
+}
+
+.send-recording {
+    color: #00a884;
+}
+
+@keyframes pulseMic {
+    from {
+        opacity: 0.5;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+@keyframes slideInBottom {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Selection Header Overlay */
+.selection-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #008069;
+    /* WhatsApp dark teal for selection */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+}
+
+.selection-info {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    color: white;
+    font-size: 18px;
+}
+
+#cancel-selection-btn {
+    cursor: pointer;
+    font-size: 20px;
+}
+
+#selection-count {
+    font-weight: 500;
+}
+
+.selection-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: white;
+    font-size: 18px;
+}
+
+#delete-selected-btn {
+    cursor: pointer;
+}
+
+/* Delete Confirmation Modal Specifics */
+.delete-modal-content {
+    background: var(--bg-secondary);
+    padding: 25px;
+    border-radius: 3px;
+    width: 320px;
+    max-width: 90%;
+    color: var(--text-primary);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.delete-modal-content p {
+    margin-bottom: 25px;
+    font-size: 16px;
+    color: #e9edef;
+}
+
+.delete-modal-options {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 15px;
+}
+
+.delete-opt-btn {
+    background: none;
+    border: none;
+    color: #00a884;
+    /* WhatsApp teal for buttons */
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 5px 10px;
+    transition: background 0.2s;
+}
+
+.delete-opt-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.delete-opt-btn.danger {
+    color: #f15c6d;
 }
 
 @keyframes fadeIn {
@@ -737,4 +1019,46 @@ body {
         opacity: 1;
         transform: scale(1);
     }
+}
+
+/* Profile Modal Specifics */
+.profile-edit-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+
+.profile-img-edit-container {
+    text-align: center;
+    width: 100%;
+}
+
+.input-group {
+    width: 100%;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #00a884;
+    font-size: 14px;
+}
+
+#edit-photo-url,
+#edit-profile-name {
+    width: 100%;
+    padding: 12px;
+    background-color: #2a3942;
+    border: 1px solid #3b4a54;
+    border-radius: 8px;
+    color: white;
+    font-size: 15px;
+    outline: none;
+    margin-bottom: 15px;
+}
+
+#edit-photo-url:focus,
+#edit-profile-name:focus {
+    border-color: #00a884;
 }

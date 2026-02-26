@@ -1,7 +1,8 @@
 // Populate Sidebar Header
 if (userData) {
-    document.getElementById('user-main-img').src = userData.photoURL || `https://ui-avatars.com/api/?name=${userData.name}&background=d32f2f&color=fff`;
-    document.getElementById('user-main-img').title = `My Number: ${userData.baatcheetNumber}`;
+    if (document.getElementById('my-name-display')) {
+        document.getElementById('my-name-display').innerText = userData.name;
+    }
     if (document.getElementById('my-number-display')) {
         document.getElementById('my-number-display').innerText = userData.baatcheetNumber;
     }
@@ -65,7 +66,6 @@ function renderChatList(filter = '') {
         const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
         div.innerHTML = `
-            <img src="${other.photoURL || 'https://ui-avatars.com/api/?name=' + other.name + '&background=d32f2f&color=fff'}" class="chat-item-img">
             <div class="chat-item-info">
                 <div class="chat-item-top">
                     <span class="chat-item-name">${other.nickname || other.name}</span>
@@ -97,12 +97,17 @@ function selectChat(chat) {
     activeChatData = chat;
     const other = getOtherParticipant(chat);
     activeChatName.innerText = other.nickname || other.name;
-    activeChatImg.src = other.photoURL || `https://ui-avatars.com/api/?name=${other.name}&background=d32f2f&color=fff`;
     activeChatStatus.innerText = 'Online';
 
-    // Show Call button
+    // Show Chat UI components
     const callBtn = document.getElementById('call-btn');
     if (callBtn) callBtn.style.display = 'block';
+
+    const chatFooter = document.querySelector('.chat-footer');
+    if (chatFooter) chatFooter.style.display = 'flex';
+
+    const chatBody = document.getElementById('chat-body');
+    if (chatBody) chatBody.classList.remove('hidden');
 
     // Mobile View Toggle
     document.querySelector('.sidebar').classList.add('hide-mobile');
@@ -112,6 +117,36 @@ function selectChat(chat) {
     listenForMessages();
     // Mark incoming messages as read when chat is opened
     markMessagesAsRead(chat.id);
+}
+
+// Close Chat (Back to contacts or blank state)
+function closeChat() {
+    activeChatId = null;
+    activeChatData = null;
+
+    // Stop message listener
+    if (messageListener) {
+        messageListener();
+        messageListener = null;
+    }
+
+    // Reset UI
+    activeChatName.innerText = 'Select a chat';
+    activeChatStatus.innerText = '';
+    chatBody.innerHTML = '';
+
+    const callBtn = document.getElementById('call-btn');
+    if (callBtn) callBtn.style.display = 'none';
+
+    const chatFooter = document.querySelector('.chat-footer');
+    if (chatFooter) chatFooter.style.display = 'none';
+
+    // Toggle Mobile view back
+    document.querySelector('.sidebar').classList.remove('hide-mobile');
+    document.querySelector('.main-chat').classList.remove('show-mobile');
+
+    exitSelectionMode();
+    renderChatList();
 }
 
 // Mark all unread messages from the other person as read
@@ -133,24 +168,83 @@ async function markMessagesAsRead(chatId) {
     }
 }
 
-// Mobile Back Button
-document.getElementById('back-btn').onclick = () => {
-    if (window.innerWidth <= 768) {
-        document.querySelector('.sidebar').classList.remove('hide-mobile');
-        document.querySelector('.main-chat').classList.remove('show-mobile');
-    }
-
-    // Hide Call button when returning to chat list
-    const callBtn = document.getElementById('call-btn');
-    if (callBtn) callBtn.style.display = 'none';
-};
+// Back Button Logic (All devices)
+document.getElementById('back-btn').onclick = closeChat;
 
 // Notification Permissions
 async function requestNotificationPermission() {
-    if ('Notification' in window) {
-        const permission = await Notification.requestPermission();
-        console.log('Notification permission:', permission);
+    if (!('Notification' in window)) {
+        alert("Aapka browser notifications support nahi karta (Not supported).");
+        return;
     }
+
+    try {
+        // Show current state for debugging
+        if (Notification.permission === 'denied') {
+            alert("Notifications pehle se Block hain. Browser settings mein ja kar 'Reset Permission' ya 'Allow' karein.");
+        }
+
+        const permission = await Notification.requestPermission();
+
+        if (permission === 'granted') {
+            alert("Notification Permission: ALLOWED (Shukriya!)");
+        } else if (permission === 'denied') {
+            alert("Notification Permission: DENIED (Block). Please change in settings.");
+        }
+    } catch (err) {
+        alert("Notification Error: " + err.message);
+    }
+}
+
+// Profile Editing Logic
+const profileModal = document.getElementById('profile-modal');
+const editProfileImg = document.getElementById('edit-profile-img');
+const editPhotoUrl = document.getElementById('edit-photo-url');
+const editProfileName = document.getElementById('edit-profile-name');
+const saveProfileBtn = document.getElementById('save-profile-btn');
+
+function openProfileModal() {
+    if (!userData) return;
+    editProfileName.value = userData.name || "";
+    profileModal.classList.remove('hidden');
+}
+
+async function saveProfile() {
+    const newName = editProfileName.value.trim();
+
+    if (!newName) {
+        alert("Pehle apna naam enter karein!");
+        return;
+    }
+
+    try {
+        saveProfileBtn.innerText = "Saving...";
+        saveProfileBtn.disabled = true;
+
+        await db.collection('users').doc(userData.uid).update({
+            name: newName
+        });
+
+        // Update local memory and UI
+        userData.name = newName;
+        localStorage.setItem('baatcheet_user', JSON.stringify(userData));
+
+        // Update Sidebar Header UI
+        document.getElementById('my-name-display').innerText = newName;
+
+        alert("Profile updated successfully!");
+        profileModal.classList.add('hidden');
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        alert("Profile update failed: " + error.message);
+    } finally {
+        saveProfileBtn.innerText = "Save Changes";
+        saveProfileBtn.disabled = false;
+    }
+}
+
+if (saveProfileBtn) {
+    saveProfileBtn.onclick = saveProfile;
 }
 
 // Show Background Notification
@@ -163,7 +257,11 @@ function showCallNotification(callerName) {
                 tag: 'incoming-call',
                 renotify: true,
                 requireInteraction: true,
-                vibrate: [200, 100, 200]
+                vibrate: [200, 100, 200],
+                actions: [
+                    { action: 'accept', title: '✅ Accept' },
+                    { action: 'decline', title: '❌ Decline' }
+                ]
             });
         });
     }
@@ -182,8 +280,92 @@ function listenForMessages() {
             chatBody.innerHTML = '';
             snapshot.docs.forEach(doc => {
                 const msg = doc.data();
+                const msgId = doc.id;
+
+                // Skip if deleted for this user
+                if (msg.deletedFor && msg.deletedFor.includes(userData.uid)) {
+                    return;
+                }
+
                 const isSent = msg.senderId === userData.uid;
                 const div = document.createElement('div');
+                div.id = `msg-${msgId}`;
+                div.dataset.id = msgId;
+
+                // --- Interaction Handlers ---
+                const handleSelectionInput = (e) => {
+                    if (isSelectionMode) {
+                        e.preventDefault();
+                        toggleMessageSelection(msgId, div);
+                    }
+                };
+
+                // Desktop Right-Click
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if (!isSelectionMode) {
+                        enterSelectionMode(msgId, div);
+                    }
+                };
+
+                // Mobile Long-Press
+                div.ontouchstart = (e) => {
+                    if (isSelectionMode) return;
+                    longPressTimeout = setTimeout(() => {
+                        enterSelectionMode(msgId, div);
+                    }, 600);
+                };
+
+                div.ontouchend = () => clearTimeout(longPressTimeout);
+                div.ontouchmove = () => clearTimeout(longPressTimeout);
+
+                // Regular Click
+                div.onclick = (e) => {
+                    if (isSelectionMode) {
+                        handleSelectionInput(e);
+                    }
+                };
+
+                // Special rendering for Call Logs
+                if (msg.type === 'call') {
+                    div.className = `message call-log ${msg.callType || ''}`;
+                    const iconClass = msg.callType === 'missed' ? 'fa-phone-slash' : 'fa-phone';
+                    div.innerHTML = `<i class="fas ${iconClass}"></i> ${msg.text}`;
+                    chatBody.appendChild(div);
+                    return;
+                }
+
+                // Special rendering for Voice Messages
+                if (msg.type === 'audio') {
+                    div.className = `message ${isSent ? 'sent' : 'received'} audio-msg`;
+                    const timeStr = msg.timestamp
+                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '...';
+
+                    let tickHtml = '';
+                    if (isSent) {
+                        tickHtml = msg.read
+                            ? '<i class="fas fa-check-double" style="color:#53bdeb;margin-left:5px;"></i>'
+                            : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
+                    }
+
+                    div.innerHTML = `
+                        <div class="audio-player">
+                            <i class="fas fa-play play-btn" onclick="this.nextElementSibling.paused ? (this.nextElementSibling.play(), this.classList.replace('fa-play', 'fa-pause')) : (this.nextElementSibling.pause(), this.classList.replace('fa-pause', 'fa-play'))"></i>
+                            <audio src="${msg.audioUrl}" onended="this.previousElementSibling.classList.replace('fa-pause', 'fa-play')"></audio>
+                            <div class="audio-waveform">
+                                <div class="mic-icon-circle">
+                                    <i class="fas fa-microphone"></i>
+                                </div>
+                                <div class="audio-dummy-bar"></div>
+                            </div>
+                        </div>
+                        <div class="msg-time">${timeStr}${tickHtml}</div>
+                    `;
+                    chatBody.appendChild(div);
+                    return;
+                }
+
                 div.className = `message ${isSent ? 'sent' : 'received'}`;
 
                 const timeStr = msg.timestamp
@@ -193,11 +375,11 @@ function listenForMessages() {
                 // Tick logic:
                 //   No tick        = received message (not mine)
                 //   Single grey ✓  = sent, not yet read
-                //   Double red ✓✓  = sent & read by recipient
+                //   Double blue ✓✓ = sent & read by recipient
                 let tickHtml = '';
                 if (isSent) {
                     if (msg.read) {
-                        tickHtml = '<i class="fas fa-check-double" style="color:#d32f2f;margin-left:5px;"></i>';
+                        tickHtml = '<i class="fas fa-check-double" style="color:#53bdeb;margin-left:5px;"></i>';
                     } else {
                         tickHtml = '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
                     }
@@ -278,11 +460,286 @@ if (emojiBtn && emojiPicker) {
     });
 }
 
+// --- Voice Recording Logic ---
+const recordingOverlay = document.getElementById('recording-overlay');
+const recordingTimer = document.getElementById('recording-timer');
+const startChattingBtn = document.getElementById('start-chatting-btn');
+
+let currentUser = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingTimerInterval = null;
+let recordedAudioBlob = null;
+let recordingStartTime = 0;
+
+// --- Selection Mode Logic ---
+let isSelectionMode = false;
+let selectedMessages = new Set(); // Stores message IDs
+let longPressTimeout = null;
+const stopRecordingBtn = document.getElementById('stop-recording-btn');
+const deleteRecordingBtn = document.getElementById('delete-recording-btn');
+const sendRecordingBtn = document.getElementById('send-recording-btn');
+
+async function startRecording() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            stream.getTracks().forEach(track => track.stop());
+
+            // Show Send, Hide Stop
+            stopRecordingBtn.classList.add('hidden');
+            sendRecordingBtn.classList.remove('hidden');
+        };
+
+        mediaRecorder.start();
+        recordingStartTime = Date.now();
+        startTimer();
+
+        recordingOverlay.classList.remove('hidden');
+        stopRecordingBtn.classList.remove('hidden');
+        sendRecordingBtn.classList.add('hidden');
+    } catch (err) {
+        console.error("Microphone access denied:", err);
+        alert("Microphone access chahiye recording ke liye!");
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        stopTimer();
+    }
+}
+
+function cancelRecording() {
+    stopRecording();
+    recordingOverlay.classList.add('hidden');
+    recordedAudioBlob = null;
+    audioChunks = [];
+}
+
+async function uploadAndSendAudio() {
+    if (!recordedAudioBlob || !activeChatId) return;
+
+    try {
+        sendRecordingBtn.classList.add('fa-spinner', 'fa-spin');
+        sendRecordingBtn.classList.remove('fa-paper-plane');
+
+        const fileName = `audio_${Date.now()}.webm`;
+        const storageRef = storage.ref(`audio_notes/${activeChatId}/${fileName}`);
+
+        await storageRef.put(recordedAudioBlob);
+        const downloadURL = await storageRef.getDownloadURL();
+
+        const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+
+        // Save as audio type message
+        await db.collection('conversations').doc(activeChatId).collection('messages').add({
+            type: 'audio',
+            audioUrl: downloadURL,
+            senderId: userData.uid,
+            timestamp: timestamp,
+            read: false
+        });
+
+        await db.collection('conversations').doc(activeChatId).update({
+            lastMessage: '🎤 Voice Message',
+            lastUpdate: timestamp
+        });
+
+        cancelRecording();
+    } catch (err) {
+        console.error("Audio upload failed:", err);
+        alert("Voice message send nahi ho saka!");
+    } finally {
+        sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
+        sendRecordingBtn.classList.add('fa-paper-plane');
+    }
+}
+
+function startTimer() {
+    recordingTimer.innerText = "00:00";
+    recordingTimerInterval = setInterval(() => {
+        const diff = Date.now() - recordingStartTime;
+        const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
+        const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+        recordingTimer.innerText = `${mins}:${secs}`;
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(recordingTimerInterval);
+}
+
+// Attach Voice Event Handlers
+stopRecordingBtn.onclick = stopRecording;
+deleteRecordingBtn.onclick = cancelRecording;
+sendRecordingBtn.onclick = uploadAndSendAudio;
+
+// --- Message Selection & Deletion Functions ---
+const selectionHeader = document.getElementById('selection-header');
+const selectionCountSpan = document.getElementById('selection-count');
+const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+const cancelSelectionBtn = document.getElementById('cancel-selection-btn');
+
+// Delete Modal Elements
+const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+const deleteModalText = document.getElementById('delete-modal-text');
+const deleteForEveryoneBtn = document.getElementById('delete-for-everyone-btn');
+const deleteForMeBtn = document.getElementById('delete-for-me-btn');
+const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
+function enterSelectionMode(msgId, element) {
+    isSelectionMode = true;
+    selectionHeader.classList.remove('hidden');
+    toggleMessageSelection(msgId, element);
+}
+
+function toggleMessageSelection(msgId, element) {
+    if (selectedMessages.has(msgId)) {
+        selectedMessages.delete(msgId);
+        element.classList.remove('selected');
+    } else {
+        selectedMessages.add(msgId);
+        element.classList.add('selected');
+    }
+
+    const count = selectedMessages.size;
+    if (count === 0) {
+        exitSelectionMode();
+    } else {
+        selectionCountSpan.innerText = count;
+    }
+}
+
+function exitSelectionMode() {
+    isSelectionMode = false;
+    selectedMessages.clear();
+    selectionHeader.classList.add('hidden');
+    // Remove highlight from all messages
+    document.querySelectorAll('.message.selected').forEach(el => el.classList.remove('selected'));
+}
+
+function showDeleteModal() {
+    if (selectedMessages.size === 0) return;
+
+    deleteModalText.innerText = selectedMessages.size === 1
+        ? "Delete message?"
+        : `Delete ${selectedMessages.size} messages?`;
+
+    // WhatsApp logic: only show "Delete for everyone" if all selected messages were sent by the user
+    let allMine = true;
+    selectedMessages.forEach(msgId => {
+        const msgDiv = document.getElementById(`msg-${msgId}`);
+        if (msgDiv && msgDiv.classList.contains('received')) {
+            allMine = false;
+        }
+    });
+
+    if (allMine) {
+        deleteForEveryoneBtn.classList.remove('hidden');
+    } else {
+        deleteForEveryoneBtn.classList.add('hidden');
+    }
+
+    deleteConfirmModal.classList.remove('hidden');
+}
+
+async function confirmDeleteForMe() {
+    if (!activeChatId) return;
+    try {
+        const batch = db.batch();
+        const convRef = db.collection('conversations').doc(activeChatId).collection('messages');
+
+        selectedMessages.forEach(msgId => {
+            batch.update(convRef.doc(msgId), {
+                deletedFor: firebase.firestore.FieldValue.arrayUnion(userData.uid)
+            });
+        });
+
+        await batch.commit();
+        closeDeleteModal();
+        exitSelectionMode();
+    } catch (err) {
+        console.error("Delete for me failed:", err);
+        alert("Delete nahi ho saka!");
+    }
+}
+
+async function confirmDeleteForEveryone() {
+    if (!activeChatId) return;
+    try {
+        const batch = db.batch();
+        const convRef = db.collection('conversations').doc(activeChatId).collection('messages');
+
+        selectedMessages.forEach(msgId => {
+            // Option A: Genuine Delete
+            batch.delete(convRef.doc(msgId));
+
+            // Option B: Mark as deleted (like WhatsApp)
+            // batch.update(convRef.doc(msgId), {
+            //     type: 'deleted',
+            //     text: '🚫 This message was deleted',
+            //     deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+            // });
+        });
+
+        await batch.commit();
+        closeDeleteModal();
+        exitSelectionMode();
+    } catch (err) {
+        console.error("Delete for everyone failed:", err);
+        alert("Delete for everyone nakam raha!");
+    }
+}
+
+function closeDeleteModal() {
+    deleteConfirmModal.classList.add('hidden');
+}
+
+cancelSelectionBtn.onclick = exitSelectionMode;
+deleteSelectedBtn.onclick = showDeleteModal;
+cancelDeleteBtn.onclick = closeDeleteModal;
+deleteForMeBtn.onclick = confirmDeleteForMe;
+deleteForEveryoneBtn.onclick = confirmDeleteForEveryone;
+
+// Exit on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isSelectionMode) {
+        exitSelectionMode();
+    }
+});
+
 messageInput.oninput = updateSendBtnIcon;
 messageInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
-sendBtn.onclick = () => { if (sendBtn.classList.contains('fa-paper-plane')) sendMessage(); };
+sendBtn.onclick = () => {
+    if (sendBtn.classList.contains('fa-paper-plane')) {
+        sendMessage();
+    } else if (sendBtn.classList.contains('fa-microphone')) {
+        startRecording();
+    }
+};
 
 document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
+
+// Listen for Service Worker messages (e.g., from Notification actions)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'DECLINE_CALL') {
+            if (typeof endCall === 'function') {
+                endCall();
+            }
+        }
+    });
+}
 
 // Start
 listenForChats();

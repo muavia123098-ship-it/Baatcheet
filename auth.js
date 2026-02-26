@@ -4,8 +4,7 @@ const profileStep = document.getElementById('profile-step');
 const successStep = document.getElementById('success-step');
 const googleLoginBtn = document.getElementById('google-login-btn');
 const createAccountBtn = document.getElementById('create-account-btn');
-const dpInput = document.getElementById('dp-input');
-const avatarPreview = document.getElementById('avatar-preview');
+
 const generatedNumberSpan = document.getElementById('generated-number');
 const startChattingBtn = document.getElementById('start-chatting-btn');
 
@@ -32,17 +31,7 @@ googleLoginBtn.onclick = async () => {
     }
 };
 
-// Handle Image Preview
-dpInput.onchange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            avatarPreview.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    }
-};
+
 
 // Create Account Logic
 createAccountBtn.onclick = async () => {
@@ -67,27 +56,32 @@ createAccountBtn.onclick = async () => {
     try {
         console.log("Attempting to save user data to Firestore...");
 
-        let photoURL = avatarPreview.src;
-        // Basic check for image size (Firestore limit is 1MB)
-        if (photoURL.length > 800000) {
-            alert("This image is too large. Please select a smaller photo or use the default.");
-            return;
-        }
 
-        const userData = {
+
+        // Data to be stored in Firestore
+        const firestoreUserData = {
             uid: currentUser.uid,
             name: name,
             bio: bio,
-            photoURL: photoURL,
             baatcheetNumber: uniqueNumber,
             email: currentUser.email,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('users').doc(currentUser.uid).set(userData);
+        await db.collection('users').doc(currentUser.uid).set(firestoreUserData);
         console.log("User data saved successfully!");
 
-        localStorage.setItem('baatcheet_user', JSON.stringify(userData));
+        // Data to be stored in localStorage (can be a subset or same as firestoreUserData)
+        const localUserData = {
+            uid: currentUser.uid,
+            name: name,
+            bio: bio,
+            baatcheetNumber: uniqueNumber,
+            email: currentUser.email,
+            // photoURL: avatarPreview.src // Removed as per instruction
+        };
+
+        localStorage.setItem('baatcheet_user', JSON.stringify(localUserData));
         generatedNumberSpan.innerText = uniqueNumber;
         showStep(successStep);
     } catch (error) {

@@ -11,3 +11,38 @@ self.addEventListener('fetch', (e) => {
         })
     );
 });
+
+self.addEventListener('notificationclick', function (event) {
+    event.notification.close();
+
+    // Check for button actions
+    if (event.action === 'accept') {
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+                if (clientList.length > 0) {
+                    return clientList[0].focus();
+                }
+                return clients.openWindow('./index.html');
+            })
+        );
+    } else if (event.action === 'decline') {
+        // Find the Baatcheet client and send a message to trigger endCall()
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+                clientList.forEach(client => {
+                    client.postMessage({ type: 'DECLINE_CALL' });
+                });
+            })
+        );
+    } else {
+        // Normal click on notification body: just focus
+        event.waitUntil(
+            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+                if (clientList.length > 0) {
+                    return clientList[0].focus();
+                }
+                return clients.openWindow('./index.html');
+            })
+        );
+    }
+});
