@@ -235,3 +235,4 @@ document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.
 
 // Start
 listenForChats();
+listenForCalls();

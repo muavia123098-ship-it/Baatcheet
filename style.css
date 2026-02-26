@@ -524,6 +524,39 @@ body {
     margin-top: 24px;
 }
 
+/* Call Modal Styles */
+.call-modal {
+    text-align: center;
+    width: 300px;
+    padding: 30px 20px;
+}
+
+.call-action-btn {
+    padding: 12px 24px;
+    border-radius: 30px;
+    border: none;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    transition: transform 0.2s;
+}
+
+.call-action-btn:hover {
+    transform: scale(1.05);
+}
+
+.accept-btn {
+    background-color: #00a884;
+}
+
+.decline-btn {
+    background-color: var(--primary-red);
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     .sidebar {
