@@ -1,5 +1,8 @@
 // Populate Sidebar Header
-const userData = window.userData;
+// userData is set globally in firebase-config.js
+if (typeof userData === 'undefined') {
+    var userData = window.userData;
+}
 
 if (userData) {
     if (document.getElementById('my-name-display')) {
@@ -199,7 +202,11 @@ async function requestNotificationPermission() {
 }
 
 // Profile Editing Logic
-const profileModal = document.getElementById('profile-modal');
+// profileModal, editProfileName, saveProfileBtn are often declared in contacts.js or auth.js
+// We use window. to ensure we don't redeclare or we check existence
+if (typeof profileModal === 'undefined') {
+    var profileModal = document.getElementById('profile-modal');
+}
 const editProfileImg = document.getElementById('edit-profile-img');
 const editPhotoUrl = document.getElementById('edit-photo-url');
 const editProfileName = document.getElementById('edit-profile-name');
@@ -463,11 +470,10 @@ if (emojiBtn && emojiPicker) {
 }
 
 // --- Voice Recording Logic ---
-const recordingOverlay = document.getElementById('recording-overlay');
-const recordingTimer = document.getElementById('recording-timer');
-const startChattingBtn = document.getElementById('start-chatting-btn');
-
-let currentUser = null;
+// currentUser is already declared in auth.js
+if (typeof currentUser === 'undefined') {
+    var currentUser = null;
+}
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingTimerInterval = null;
