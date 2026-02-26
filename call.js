@@ -14,8 +14,9 @@ const servers = {
 let pc = new RTCPeerConnection(servers);
 let localStream = null;
 let remoteStream = null;
-let currentCallId = null;
 let incomingCallListener = null;
+let callStartTime = null;
+let otherParticipantId = null;
 
 // Standardize globals
 const db = window.db;
@@ -101,6 +102,7 @@ async function startCall(receiverId) {
         const answerCandidates = callDoc.collection('answerCandidates');
 
         currentCallId = callDoc.id;
+        otherParticipantId = receiverId;
 
         // Get candidates for caller, save to db
         pc.onicecandidate = (event) => {
@@ -136,6 +138,7 @@ async function startCall(receiverId) {
             }
 
             if (data.status === 'connected') {
+                if (!callStartTime) callStartTime = Date.now();
                 callStatus.innerText = "Connected";
                 callStatus.style.color = "#00a884"; // Green for connected
             }
@@ -178,6 +181,7 @@ function listenForCalls() {
                 if (change.type === 'added') {
                     const callData = change.doc.data();
                     currentCallId = change.doc.id;
+                    otherParticipantId = callData.callerId;
 
                     // Play Ringtone
                     if (ringtoneAudio) {
@@ -280,6 +284,7 @@ async function answerCall(callId) {
             status: "connected"
         });
 
+        if (!callStartTime) callStartTime = Date.now();
         callStatus.innerText = "Connected";
         callStatus.style.color = "#00a884";
 
@@ -317,6 +322,16 @@ async function endCall() {
             await db.collection('calls').doc(currentCallId).delete();
         } catch (e) { console.error("Error deleting call doc", e); }
     }
+
+    let duration = 0;
+    if (callStartTime) {
+        duration = Math.floor((Date.now() - callStartTime) / 1000);
+    }
+
+    if (duration > 0 && otherParticipantId) {
+        addCallLog('answered', otherParticipantId, duration);
+    }
+
     endCallUI();
 }
 
@@ -336,6 +351,8 @@ function endCallUI() {
     localStream = null;
     remoteStream = null;
     currentCallId = null;
+    callStartTime = null;
+    otherParticipantId = null;
 
     // Reset States
     isMuted = false;
@@ -408,7 +425,7 @@ if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
 if (declineCallBtn) declineCallBtn.onclick = () => endCall();
 if (endCallBtn) endCallBtn.onclick = () => endCall();
 // Helper to add call record to chat
-async function addCallLog(type, otherUserId) {
+async function addCallLog(type, otherUserId, duration = null) {
     if (!window.userData || !otherUserId) return;
     const convId = [window.userData.uid, otherUserId].sort().join('_');
     const text = type === 'missed' ? 'Missed Voice Call' : 'Voice Call';
@@ -420,6 +437,7 @@ async function addCallLog(type, otherUserId) {
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type: 'call',
             callType: type, // 'answered' or 'missed'
+            duration: duration,
             read: true
         });
 

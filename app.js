@@ -489,7 +489,11 @@ function listenForMessages() {
                 if (msg.type === 'call') {
                     div.className = `message call-log ${msg.callType || ''}`;
                     const iconClass = msg.callType === 'missed' ? 'fa-phone-slash' : 'fa-phone';
-                    div.innerHTML = `<i class="fas ${iconClass}"></i> ${msg.text}`;
+                    const timeStr = msg.timestamp
+                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '';
+                    const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
+                    div.innerHTML = `<i class="fas ${iconClass}"></i> ${msg.text}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
                     if (nodes.chatBody) nodes.chatBody.appendChild(div);
                     return;
                 }
@@ -504,7 +508,7 @@ function listenForMessages() {
                     let tickHtml = '';
                     if (isSent) {
                         tickHtml = msg.read
-                            ? `<i class="fas fa-check-double" style="color:var(--primary-red);margin-left:5px;"></i>`
+                            ? `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`
                             : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
                     }
 
@@ -538,7 +542,7 @@ function listenForMessages() {
                 let tickHtml = '';
                 if (isSent) {
                     if (msg.read) {
-                        tickHtml = `<i class="fas fa-check-double" style="color:var(--primary-red);margin-left:5px;"></i>`;
+                        tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`;
                     } else {
                         tickHtml = '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
                     }
@@ -643,6 +647,16 @@ function initEmojiPicker() {
             };
         });
     }
+}
+
+function formatDuration(seconds) {
+    if (!seconds) return "";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+        return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
 }
 
 // --- Voice Recording Logic ---

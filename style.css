@@ -348,7 +348,10 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
-    z-index: 10;
+    z-index: 100;
+    /* Increased z-index */
+    position: relative;
+    /* Base for overlay */
 }
 
 .input-area {
@@ -829,14 +832,27 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: var(--bg-secondary);
+    background: var(--panel-header);
+    /* Same as footer */
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 20px;
-    z-index: 10;
-    border-radius: 8px;
-    animation: slideInBottom 0.2s ease-out;
+    padding: 0 16px;
+    z-index: 101;
+    border-radius: 0;
+    animation: slideInRight 0.25s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
 }
 
 .recording-info {
