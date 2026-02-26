@@ -213,6 +213,19 @@
         </div>
     </div>
 
+    <!-- Message Deletion Modal -->
+    <div id="delete-confirm-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2 id="delete-modal-text">Delete message?</h2>
+            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
+                <button class="primary-btn" id="delete-for-everyone-btn">Delete for Everyone</button>
+                <button class="primary-btn" id="delete-for-me-btn" style="background: #333;">Delete for Me</button>
+                <button class="primary-btn" id="cancel-delete-btn"
+                    style="background: transparent; border: 1px solid #333; color: #8696a0;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>

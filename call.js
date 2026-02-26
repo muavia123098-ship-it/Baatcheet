@@ -73,7 +73,7 @@ async function setupLocalStream() {
 
 // 1. Create a Call (Caller)
 async function startCall(receiverId) {
-    if (!userData || !receiverId) return;
+    if (!window.userData || !receiverId) return;
 
     // UI Update
     activeCallModal.classList.remove('hidden');
@@ -119,8 +119,8 @@ async function startCall(receiverId) {
         // Save call request to Firestore
         await callDoc.set({
             offer,
-            callerId: userData.uid,
-            callerName: userData.name,
+            callerId: window.userData.uid,
+            callerName: window.userData.name,
             receiverId: receiverId,
             status: "ringing",
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -164,14 +164,14 @@ async function startCall(receiverId) {
 
 // 2. Listen for Incoming Calls
 function listenForCalls() {
-    if (!userData) return;
+    if (!window.userData) return;
 
     if (incomingCallListener) {
         incomingCallListener(); // Unsubscribe previous if any
     }
 
     incomingCallListener = db.collection('calls')
-        .where('receiverId', '==', userData.uid)
+        .where('receiverId', '==', window.userData.uid)
         .where('status', '==', 'ringing')
         .onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
@@ -409,14 +409,14 @@ if (declineCallBtn) declineCallBtn.onclick = () => endCall();
 if (endCallBtn) endCallBtn.onclick = () => endCall();
 // Helper to add call record to chat
 async function addCallLog(type, otherUserId) {
-    if (!userData || !otherUserId) return;
-    const convId = [userData.uid, otherUserId].sort().join('_');
+    if (!window.userData || !otherUserId) return;
+    const convId = [window.userData.uid, otherUserId].sort().join('_');
     const text = type === 'missed' ? 'Missed Voice Call' : 'Voice Call';
 
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({
             text: text,
-            senderId: userData.uid,
+            senderId: window.userData.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type: 'call',
             callType: type, // 'answered' or 'missed'

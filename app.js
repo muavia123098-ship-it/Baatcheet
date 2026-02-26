@@ -9,6 +9,7 @@ let messageListener = null;
 let nodes = {};
 
 function initDOMRefs() {
+    console.log("initDOMRefs: Mapping elements...");
     nodes = {
         chatList: document.getElementById('chat-list'),
         chatBody: document.getElementById('chat-body'),
@@ -18,8 +19,73 @@ function initDOMRefs() {
         activeChatStatus: document.getElementById('active-chat-status'),
         myNameDisplay: document.getElementById('my-name-display'),
         myNumberDisplay: document.getElementById('my-number-display'),
-        backBtn: document.getElementById('back-btn')
+        backBtn: document.getElementById('back-btn'),
+        callBtn: document.getElementById('call-btn'),
+        recordingOverlay: document.getElementById('recording-overlay'),
+        recordingTimer: document.getElementById('recording-timer'),
+        stopRecordingBtn: document.getElementById('stop-recording-btn'),
+        deleteRecordingBtn: document.getElementById('delete-recording-btn'),
+        sendRecordingBtn: document.getElementById('send-recording-btn'),
+        selectionHeader: document.getElementById('selection-header'),
+        selectionCount: document.getElementById('selection-count'),
+        deleteSelectedBtn: document.getElementById('delete-selected-btn'),
+        cancelSelectionBtn: document.getElementById('cancel-selection-btn'),
+        deleteConfirmModal: document.getElementById('delete-confirm-modal'),
+        deleteModalText: document.getElementById('delete-modal-text'),
+        deleteForEveryoneBtn: document.getElementById('delete-for-everyone-btn'),
+        deleteForMeBtn: document.getElementById('delete-for-me-btn'),
+        cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
+        emojiBtn: document.getElementById('emoji-btn'),
+        emojiPicker: document.getElementById('emoji-picker')
     };
+
+    // Attach local listeners with high priority
+    if (nodes.messageInput) {
+        const handleInput = () => {
+            updateSendBtnIcon();
+        };
+        nodes.messageInput.onkeyup = (e) => {
+            if (e.key === 'Enter') sendMessage();
+            handleInput();
+        };
+        nodes.messageInput.oninput = handleInput;
+        nodes.messageInput.onkeydown = handleInput;
+        nodes.messageInput.onpaste = handleInput;
+    }
+    if (nodes.sendBtn) {
+        nodes.sendBtn.onclick = () => {
+            if (nodes.sendBtn.classList.contains('fa-paper-plane')) {
+                sendMessage();
+            } else {
+                startRecording();
+            }
+        };
+    }
+    if (nodes.backBtn) nodes.backBtn.onclick = closeChat;
+
+    // Call Listener
+    if (nodes.callBtn) {
+        nodes.callBtn.onclick = () => {
+            if (activeChatData) {
+                const other = getOtherParticipant(activeChatData);
+                if (other && other.uid) startCall(other.uid);
+            }
+        };
+    }
+
+    // Voice Recording Listeners
+    if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.onclick = stopRecording;
+    if (nodes.deleteRecordingBtn) nodes.deleteRecordingBtn.onclick = cancelRecording;
+    if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.onclick = uploadAndSendAudio;
+
+    // Selection/Delete Listeners
+    if (nodes.cancelSelectionBtn) nodes.cancelSelectionBtn.onclick = exitSelectionMode;
+    if (nodes.deleteSelectedBtn) nodes.deleteSelectedBtn.onclick = showDeleteModal;
+    if (nodes.cancelDeleteBtn) nodes.cancelDeleteBtn.onclick = closeDeleteModal;
+    if (nodes.deleteForMeBtn) nodes.deleteForMeBtn.onclick = confirmDeleteForMe;
+    if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.onclick = confirmDeleteForEveryone;
+
+    initEmojiPicker();
 }
 
 function updateHeaderUI() {
@@ -147,13 +213,16 @@ function selectChat(chat) {
     listenForOtherPresence(other.uid);
 
     // Show Chat UI components
-    const callBtn = document.getElementById('call-btn');
-    if (callBtn) callBtn.style.display = 'block';
+    if (nodes.callBtn) nodes.callBtn.style.display = 'block';
 
     const chatFooter = document.querySelector('.chat-footer');
     if (chatFooter) chatFooter.style.display = 'flex';
 
-    if (nodes.chatBody) nodes.chatBody.classList.remove('hidden');
+    // Hide welcome message or empty state help
+    if (nodes.chatBody) {
+        nodes.chatBody.classList.remove('hidden');
+        nodes.chatBody.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-secondary);">Loading messages...</div>';
+    }
 
     // Mobile View Toggle
     const sidebar = document.querySelector('.sidebar');
@@ -189,8 +258,7 @@ function closeChat() {
         presenceListener = null;
     }
 
-    const callBtn = document.getElementById('call-btn');
-    if (callBtn) callBtn.style.display = 'none';
+    if (nodes.callBtn) nodes.callBtn.style.display = 'none';
 
     const chatFooter = document.querySelector('.chat-footer');
     if (chatFooter) chatFooter.style.display = 'none';
@@ -249,8 +317,10 @@ async function markMessagesAsRead(chatId) {
 
 window.onload = () => {
     initDOMRefs();
-    if (nodes.backBtn) nodes.backBtn.onclick = closeChat;
-    document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
+    const searchInput = document.getElementById('chat-search');
+    if (searchInput) {
+        searchInput.oninput = (e) => renderChatList(e.target.value);
+    }
 };
 
 // Notification Permissions
@@ -366,7 +436,7 @@ function listenForMessages() {
         .collection('messages')
         .orderBy('timestamp', 'asc')
         .onSnapshot(snapshot => {
-            chatBody.innerHTML = '';
+            if (nodes.chatBody) nodes.chatBody.innerHTML = '';
             snapshot.docs.forEach(doc => {
                 const msg = doc.data();
                 const msgId = doc.id;
@@ -420,7 +490,7 @@ function listenForMessages() {
                     div.className = `message call-log ${msg.callType || ''}`;
                     const iconClass = msg.callType === 'missed' ? 'fa-phone-slash' : 'fa-phone';
                     div.innerHTML = `<i class="fas ${iconClass}"></i> ${msg.text}`;
-                    chatBody.appendChild(div);
+                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
                     return;
                 }
 
@@ -451,7 +521,7 @@ function listenForMessages() {
                         </div>
                         <div class="msg-time">${timeStr}${tickHtml}</div>
                     `;
-                    chatBody.appendChild(div);
+                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
                     return;
                 }
 
@@ -478,9 +548,9 @@ function listenForMessages() {
                     ${msg.text}
                     <div class="msg-time">${timeStr}${tickHtml}</div>
                 `;
-                chatBody.appendChild(div);
+                if (nodes.chatBody) nodes.chatBody.appendChild(div);
             });
-            chatBody.scrollTop = chatBody.scrollHeight;
+            if (nodes.chatBody) nodes.chatBody.scrollTop = nodes.chatBody.scrollHeight;
 
             // Auto-mark incoming as read while the chat is open
             markMessagesAsRead(activeChatId);
@@ -489,17 +559,32 @@ function listenForMessages() {
 
 // 5. Send Message
 async function sendMessage() {
-    const userData = window.userData;
-    const text = messageInput.value.trim();
-    if (!text || !activeChatId) return;
+    console.log("sendMessage: check state...", { activeChatId, hasInput: !!nodes.messageInput });
+    if (!activeChatId) {
+        console.warn("No active chat selected!");
+        return;
+    }
 
-    messageInput.value = '';
+    const mInput = nodes.messageInput || document.getElementById('message-input');
+    if (!mInput) return;
+
+    const text = mInput.value.trim();
+    if (!text) {
+        console.log("Empty message, ignoring.");
+        return;
+    }
+
+    console.log("Sending message text:", text);
+    const uData = window.userData;
+
+    // Clear input immediately for responsiveness
+    mInput.value = '';
     updateSendBtnIcon();
 
     try {
         await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
             text: text,
-            senderId: userData.uid,
+            senderId: uData.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             read: false
         });
@@ -508,57 +593,60 @@ async function sendMessage() {
             lastMessage: text,
             lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
         });
+        console.log("Message sent successfully!");
     } catch (e) {
         console.error("Error sending message:", e);
+        alert("Pesh aaney wala masla (Sending failed): " + e.message);
     }
-}
-
-// Attach send logic
-if (sendBtn) {
-    sendBtn.onclick = sendMessage;
 }
 
 // UI Handlers
 function updateSendBtnIcon() {
-    if (messageInput.value.trim() !== '') {
-        sendBtn.className = 'fas fa-paper-plane footer-btn send-btn';
+    const mInput = nodes.messageInput || document.getElementById('message-input');
+    const sBtn = nodes.sendBtn || document.getElementById('send-btn');
+    if (!sBtn || !mInput) return;
+
+    if (mInput.value.trim() !== '') {
+        sBtn.classList.remove('fa-microphone');
+        sBtn.classList.add('fa-paper-plane', 'send-btn');
     } else {
-        sendBtn.className = 'fas fa-microphone footer-btn';
+        sBtn.classList.remove('fa-paper-plane', 'send-btn');
+        sBtn.classList.add('fa-microphone');
     }
 }
 
-// Emoji Picker Logic
-const emojiBtn = document.getElementById('emoji-btn');
-const emojiPicker = document.getElementById('emoji-picker');
-
-if (emojiBtn && emojiPicker) {
-    emojiBtn.onclick = (e) => {
-        e.stopPropagation();
-        emojiPicker.classList.toggle('hidden');
-    };
-
-    // Close picker when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
-            emojiPicker.classList.add('hidden');
-        }
-    });
-
-    // Handle emoji click
-    const emojis = document.querySelectorAll('.emoji');
-    emojis.forEach(emoji => {
-        emoji.onclick = () => {
-            messageInput.value += emoji.innerText;
-            updateSendBtnIcon(); // Update send button state
-            messageInput.focus();
+// --- Emoji Picker Logic ---
+function initEmojiPicker() {
+    if (nodes.emojiBtn && nodes.emojiPicker) {
+        nodes.emojiBtn.onclick = (e) => {
+            e.stopPropagation();
+            nodes.emojiPicker.classList.toggle('hidden');
         };
-    });
+
+        // Close picker when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!nodes.emojiPicker.contains(e.target) && e.target !== nodes.emojiBtn) {
+                nodes.emojiPicker.classList.add('hidden');
+            }
+        });
+
+        // Handle emoji click
+        const emojis = document.querySelectorAll('.emoji');
+        emojis.forEach(emoji => {
+            emoji.onclick = () => {
+                const mInput = nodes.messageInput || document.getElementById('message-input');
+                if (mInput) {
+                    mInput.value += emoji.innerText;
+                    updateSendBtnIcon();
+                    mInput.focus();
+                }
+            };
+        });
+    }
 }
 
 // --- Voice Recording Logic ---
 // We use window.currentUser if defined in auth.js
-const recordingOverlay = document.getElementById('recording-overlay');
-const recordingTimer = document.getElementById('recording-timer');
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingTimerInterval = null;
@@ -569,9 +657,6 @@ let recordingStartTime = 0;
 let isSelectionMode = false;
 let selectedMessages = new Set(); // Stores message IDs
 let longPressTimeout = null;
-const stopRecordingBtn = document.getElementById('stop-recording-btn');
-const deleteRecordingBtn = document.getElementById('delete-recording-btn');
-const sendRecordingBtn = document.getElementById('send-recording-btn');
 
 async function startRecording() {
     try {
@@ -588,17 +673,17 @@ async function startRecording() {
             stream.getTracks().forEach(track => track.stop());
 
             // Show Send, Hide Stop
-            stopRecordingBtn.classList.add('hidden');
-            sendRecordingBtn.classList.remove('hidden');
+            if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.classList.add('hidden');
+            if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.classList.remove('hidden');
         };
 
         mediaRecorder.start();
         recordingStartTime = Date.now();
         startTimer();
 
-        recordingOverlay.classList.remove('hidden');
-        stopRecordingBtn.classList.remove('hidden');
-        sendRecordingBtn.classList.add('hidden');
+        if (nodes.recordingOverlay) nodes.recordingOverlay.classList.remove('hidden');
+        if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.classList.remove('hidden');
+        if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.classList.add('hidden');
     } catch (err) {
         console.error("Microphone access denied:", err);
         alert("Microphone access chahiye recording ke liye!");
@@ -614,7 +699,7 @@ function stopRecording() {
 
 function cancelRecording() {
     stopRecording();
-    recordingOverlay.classList.add('hidden');
+    if (nodes.recordingOverlay) nodes.recordingOverlay.classList.add('hidden');
     recordedAudioBlob = null;
     audioChunks = [];
 }
@@ -623,8 +708,10 @@ async function uploadAndSendAudio() {
     if (!recordedAudioBlob || !activeChatId) return;
 
     try {
-        sendRecordingBtn.classList.add('fa-spinner', 'fa-spin');
-        sendRecordingBtn.classList.remove('fa-paper-plane');
+        if (nodes.sendRecordingBtn) {
+            nodes.sendRecordingBtn.classList.add('fa-spinner', 'fa-spin');
+            nodes.sendRecordingBtn.classList.remove('fa-paper-plane');
+        }
 
         const fileName = `audio_${Date.now()}.webm`;
         const storageRef = storage.ref(`audio_notes/${activeChatId}/${fileName}`);
@@ -638,7 +725,7 @@ async function uploadAndSendAudio() {
         await db.collection('conversations').doc(activeChatId).collection('messages').add({
             type: 'audio',
             audioUrl: downloadURL,
-            senderId: userData.uid,
+            senderId: window.userData.uid,
             timestamp: timestamp,
             read: false
         });
@@ -653,18 +740,20 @@ async function uploadAndSendAudio() {
         console.error("Audio upload failed:", err);
         alert("Voice message send nahi ho saka!");
     } finally {
-        sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
-        sendRecordingBtn.classList.add('fa-paper-plane');
+        if (nodes.sendRecordingBtn) {
+            nodes.sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
+            nodes.sendRecordingBtn.classList.add('fa-paper-plane');
+        }
     }
 }
 
 function startTimer() {
-    recordingTimer.innerText = "00:00";
+    if (nodes.recordingTimer) nodes.recordingTimer.innerText = "00:00";
     recordingTimerInterval = setInterval(() => {
         const diff = Date.now() - recordingStartTime;
         const mins = Math.floor(diff / 60000).toString().padStart(2, '0');
         const secs = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-        recordingTimer.innerText = `${mins}:${secs}`;
+        if (nodes.recordingTimer) nodes.recordingTimer.innerText = `${mins}:${secs}`;
     }, 1000);
 }
 
@@ -672,27 +761,14 @@ function stopTimer() {
     clearInterval(recordingTimerInterval);
 }
 
-// Attach Voice Event Handlers
-stopRecordingBtn.onclick = stopRecording;
-deleteRecordingBtn.onclick = cancelRecording;
-sendRecordingBtn.onclick = uploadAndSendAudio;
+// Voice Event Handlers are now in initDOMRefs
 
 // --- Message Selection & Deletion Functions ---
-const selectionHeader = document.getElementById('selection-header');
-const selectionCountSpan = document.getElementById('selection-count');
-const deleteSelectedBtn = document.getElementById('delete-selected-btn');
-const cancelSelectionBtn = document.getElementById('cancel-selection-btn');
-
-// Delete Modal Elements
-const deleteConfirmModal = document.getElementById('delete-confirm-modal');
-const deleteModalText = document.getElementById('delete-modal-text');
-const deleteForEveryoneBtn = document.getElementById('delete-for-everyone-btn');
-const deleteForMeBtn = document.getElementById('delete-for-me-btn');
-const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+// Elements are now in nodes cache
 
 function enterSelectionMode(msgId, element) {
     isSelectionMode = true;
-    selectionHeader.classList.remove('hidden');
+    if (nodes.selectionHeader) nodes.selectionHeader.classList.remove('hidden');
     toggleMessageSelection(msgId, element);
 }
 
@@ -709,14 +785,14 @@ function toggleMessageSelection(msgId, element) {
     if (count === 0) {
         exitSelectionMode();
     } else {
-        selectionCountSpan.innerText = count;
+        if (nodes.selectionCount) nodes.selectionCount.innerText = count;
     }
 }
 
 function exitSelectionMode() {
     isSelectionMode = false;
     selectedMessages.clear();
-    selectionHeader.classList.add('hidden');
+    if (nodes.selectionHeader) nodes.selectionHeader.classList.add('hidden');
     // Remove highlight from all messages
     document.querySelectorAll('.message.selected').forEach(el => el.classList.remove('selected'));
 }
@@ -724,9 +800,11 @@ function exitSelectionMode() {
 function showDeleteModal() {
     if (selectedMessages.size === 0) return;
 
-    deleteModalText.innerText = selectedMessages.size === 1
-        ? "Delete message?"
-        : `Delete ${selectedMessages.size} messages?`;
+    if (nodes.deleteModalText) {
+        nodes.deleteModalText.innerText = selectedMessages.size === 1
+            ? "Delete message?"
+            : `Delete ${selectedMessages.size} messages?`;
+    }
 
     // WhatsApp logic: only show "Delete for everyone" if all selected messages were sent by the user
     let allMine = true;
@@ -738,12 +816,12 @@ function showDeleteModal() {
     });
 
     if (allMine) {
-        deleteForEveryoneBtn.classList.remove('hidden');
+        if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.classList.remove('hidden');
     } else {
-        deleteForEveryoneBtn.classList.add('hidden');
+        if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.classList.add('hidden');
     }
 
-    deleteConfirmModal.classList.remove('hidden');
+    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.remove('hidden');
 }
 
 async function confirmDeleteForMe() {
@@ -754,7 +832,7 @@ async function confirmDeleteForMe() {
 
         selectedMessages.forEach(msgId => {
             batch.update(convRef.doc(msgId), {
-                deletedFor: firebase.firestore.FieldValue.arrayUnion(userData.uid)
+                deletedFor: firebase.firestore.FieldValue.arrayUnion(window.userData.uid)
             });
         });
 
@@ -795,31 +873,10 @@ async function confirmDeleteForEveryone() {
 }
 
 function closeDeleteModal() {
-    deleteConfirmModal.classList.add('hidden');
+    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.add('hidden');
 }
 
-cancelSelectionBtn.onclick = exitSelectionMode;
-deleteSelectedBtn.onclick = showDeleteModal;
-cancelDeleteBtn.onclick = closeDeleteModal;
-deleteForMeBtn.onclick = confirmDeleteForMe;
-deleteForEveryoneBtn.onclick = confirmDeleteForEveryone;
-
-// Exit on Escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isSelectionMode) {
-        exitSelectionMode();
-    }
-});
-
-messageInput.oninput = updateSendBtnIcon;
-messageInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
-sendBtn.onclick = () => {
-    if (sendBtn.classList.contains('fa-paper-plane')) {
-        sendMessage();
-    } else if (sendBtn.classList.contains('fa-microphone')) {
-        startRecording();
-    }
-};
+// Redundant listeners removed (handled in initDOMRefs)
 
 document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
 
@@ -834,19 +891,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// Start
-listenForChats();
-listenForCalls();
+// Initializers at the bottom should be careful
+// Redundant top-level listenForChats() call as it's handled in onAuthStateChanged
 
-// Attach the call event
-const mainCallBtn = document.getElementById('call-btn');
-if (mainCallBtn) {
-    mainCallBtn.onclick = () => {
-        if (activeChatData) {
-            const other = getOtherParticipant(activeChatData);
-            if (other && other.uid) {
-                startCall(other.uid);
-            }
-        }
-    };
-}
+// Redundant mainCallBtn attachment removed (handled in initDOMRefs)
