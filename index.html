@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, interactive-widget=resizes-content">
     <title>Baatcheet - Messenger</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#202c33">
@@ -120,41 +121,49 @@
     </div>
 
     <!-- Incoming Call Modal -->
-    <div id="incoming-call-modal" class="modal-overlay hidden" style="z-index: 2000;">
-        <div class="modal call-modal">
-            <h2 style="margin-bottom: 20px;">Incoming Call...</h2>
-            <img id="incoming-caller-img" src="https://ui-avatars.com/api/?name=Caller&background=202c33&color=fff"
-                alt="Caller" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 15px;">
-            <div id="incoming-caller-name" style="font-size: 18px; font-weight: 500; margin-bottom: 30px;">Caller Name
-            </div>
+    <div id="incoming-call-modal" class="wa-call-screen hidden">
+        <div class="wa-call-header">
+            <div class="wa-call-status">Baatcheet Audio Call</div>
+            <div id="incoming-caller-name" class="wa-caller-name">Caller Name</div>
+        </div>
 
-            <div style="display: flex; gap: 20px; justify-content: center;">
-                <button class="call-action-btn decline-btn" id="decline-call-btn">
-                    <i class="fas fa-phone-slash"></i> Decline
-                </button>
-                <button class="call-action-btn accept-btn" id="accept-call-btn">
-                    <i class="fas fa-phone-alt"></i> Accept
-                </button>
-            </div>
+        <img id="incoming-caller-img" src="https://ui-avatars.com/api/?name=Caller&background=202c33&color=fff"
+            alt="Caller" class="wa-caller-img">
+
+        <div class="wa-call-actions">
+            <button class="wa-action-btn btn-reject" id="decline-call-btn" title="Decline">
+                <i class="fas fa-phone-slash"></i>
+            </button>
+            <button class="wa-action-btn btn-accept" id="accept-call-btn" title="Accept"
+                style="transform: rotate(135deg);">
+                <i class="fas fa-phone" style="transform: rotate(-135deg);"></i>
+            </button>
         </div>
     </div>
 
     <!-- Active Call Modal -->
-    <div id="active-call-modal" class="modal-overlay hidden" style="z-index: 2000;">
-        <div class="modal call-modal">
-            <h2 id="call-status" style="margin-bottom: 20px; color: var(--primary);">Calling...</h2>
-            <img id="active-call-img" src="https://ui-avatars.com/api/?name=User&background=202c33&color=fff" alt="User"
-                style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 15px;">
-            <div id="active-call-name" style="font-size: 18px; font-weight: 500; margin-bottom: 30px;">User Name</div>
+    <div id="active-call-modal" class="wa-call-screen hidden">
+        <div class="wa-call-header">
+            <div id="call-status" class="wa-call-status">Calling...</div>
+            <div id="active-call-name" class="wa-caller-name">User Name</div>
+        </div>
 
-            <audio id="local-audio" autoplay muted></audio>
-            <audio id="remote-audio" autoplay></audio>
+        <img id="active-call-img" src="https://ui-avatars.com/api/?name=User&background=202c33&color=fff" alt="User"
+            class="wa-caller-img">
 
-            <div style="display: flex; gap: 20px; justify-content: center;">
-                <button class="call-action-btn decline-btn" id="end-call-btn">
-                    <i class="fas fa-phone-slash"></i> End Call
-                </button>
-            </div>
+        <audio id="local-audio" autoplay muted></audio>
+        <audio id="remote-audio" autoplay></audio>
+
+        <div class="wa-call-actions">
+            <button class="wa-action-btn wa-secondary-btn" id="mute-btn" title="Mute">
+                <i class="fas fa-microphone"></i>
+            </button>
+            <button class="wa-action-btn btn-end" id="end-call-btn" title="End Call">
+                <i class="fas fa-phone-slash"></i>
+            </button>
+            <button class="wa-action-btn wa-secondary-btn" id="speaker-btn" title="Speaker">
+                <i class="fas fa-volume-up"></i>
+            </button>
         </div>
     </div>
 

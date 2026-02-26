@@ -146,8 +146,10 @@ async function markMessagesAsRead(chatId) {
 
 // Mobile Back Button
 document.getElementById('back-btn').onclick = () => {
-    document.querySelector('.sidebar').classList.remove('hide-mobile');
-    document.querySelector('.main-chat').classList.remove('show-mobile');
+    if (window.innerWidth <= 768) {
+        document.querySelector('.sidebar').classList.remove('hide-mobile');
+        document.querySelector('.main-chat').classList.remove('show-mobile');
+    }
 
     // Hide Call button when returning to chat list
     const callBtn = document.getElementById('call-btn');

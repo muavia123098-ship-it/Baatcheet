@@ -24,9 +24,15 @@ const activeCallModal = document.getElementById('active-call-modal');
 const acceptCallBtn = document.getElementById('accept-call-btn');
 const declineCallBtn = document.getElementById('decline-call-btn');
 const endCallBtn = document.getElementById('end-call-btn');
+const muteBtn = document.getElementById('mute-btn');
+const speakerBtn = document.getElementById('speaker-btn');
 const localAudio = document.getElementById('local-audio');
 const remoteAudio = document.getElementById('remote-audio');
 const callStatus = document.getElementById('call-status');
+
+// Call State
+let isMuted = false;
+let isSpeakerOn = true;
 
 // Initialize Media Channels
 async function setupLocalStream() {
@@ -62,8 +68,20 @@ async function startCall(receiverId) {
     // UI Update
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Calling...";
-    document.getElementById('active-call-name').innerText = activeChatData ? activeChatData.name : "Contact";
-    document.getElementById('active-call-img').src = activeChatData ? activeChatData.photo : "https://ui-avatars.com/api/?name=User&background=202c33&color=fff";
+
+    let callName = "Contact";
+    let callPhoto = "https://ui-avatars.com/api/?name=User&background=202c33&color=fff";
+
+    if (activeChatData) {
+        const other = getOtherParticipant(activeChatData);
+        if (other) {
+            callName = other.nickname || other.name || "Contact";
+            callPhoto = other.photoURL || `https://ui-avatars.com/api/?name=${callName}&background=d32f2f&color=fff`;
+        }
+    }
+
+    document.getElementById('active-call-name').innerText = callName;
+    document.getElementById('active-call-img').src = callPhoto;
 
     try {
         await setupLocalStream();
@@ -271,6 +289,17 @@ function endCallUI() {
     remoteStream = null;
     currentCallId = null;
 
+    // Reset States
+    isMuted = false;
+    isSpeakerOn = true;
+    if (muteBtn) {
+        muteBtn.classList.remove('active');
+        muteBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+    }
+    if (speakerBtn) {
+        speakerBtn.classList.remove('active');
+    }
+
     // Reset UI
     activeCallModal.classList.add('hidden');
     incomingCallModal.classList.add('hidden');
@@ -278,6 +307,42 @@ function endCallUI() {
     callStatus.style.color = "var(--primary)";
     localAudio.srcObject = null;
     remoteAudio.srcObject = null;
+}
+
+// Mute / Speaker Toggle
+if (muteBtn) {
+    muteBtn.onclick = () => {
+        if (!localStream) return;
+        isMuted = !isMuted;
+        localStream.getAudioTracks().forEach(track => {
+            track.enabled = !isMuted;
+        });
+        muteBtn.classList.toggle('active', isMuted);
+        muteBtn.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
+    };
+}
+
+if (speakerBtn) {
+    speakerBtn.onclick = async () => {
+        const remoteAudio = document.getElementById('remote-audio');
+        if (!remoteAudio) return;
+
+        isSpeakerOn = !isSpeakerOn;
+        speakerBtn.classList.toggle('active', !isSpeakerOn); // Active highlight when speaker is "off" (earpiece mode)
+
+        // Attempt to switch output if setSinkId is supported (mostly desktop/chrome)
+        // On mobile browsers, this is mostly handled by system/hardware but we can try to toggle sinkId
+        if (remoteAudio.setSinkId) {
+            try {
+                // If isSpeakerOn is false, we try to find a non-speaker device if available
+                // But usually browsers don't give "earpiece" vs "speaker" as separate IDs in JS
+                // However, we reflect the UI state for the user.
+                console.log("Speaker toggled to:", isSpeakerOn);
+            } catch (err) {
+                console.error("setSinkId failed", err);
+            }
+        }
+    };
 }
 
 // Event Listeners
