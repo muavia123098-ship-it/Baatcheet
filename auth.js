@@ -70,6 +70,8 @@ createAccountBtn.onclick = async () => {
             bio: bio,
             baatcheetNumber: uniqueNumber,
             email: currentUser.email,
+            status: 'online',
+            lastSeen: window.firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
         };
 
@@ -105,3 +107,41 @@ function showStep(stepToShow) {
     });
     stepToShow.classList.remove('hidden');
 }
+
+// Global Presence Logic
+function managePresence() {
+    const user = window.auth.currentUser;
+    if (!user) return;
+
+    const userRef = window.db.collection('users').doc(user.uid);
+
+    // Set online on load
+    userRef.update({
+        status: 'online',
+        lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Set offline on disconnect
+    window.addEventListener('beforeunload', () => {
+        userRef.update({
+            status: 'offline',
+            lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    // Handle visibility change (tab background/foreground)
+    document.addEventListener('visibilitychange', () => {
+        const status = document.visibilityState === 'visible' ? 'online' : 'offline';
+        userRef.update({
+            status: status,
+            lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
+        });
+    });
+}
+
+// Wait for auth state to manage presence
+window.auth.onAuthStateChanged(user => {
+    if (user) {
+        managePresence();
+    }
+});

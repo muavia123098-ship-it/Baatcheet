@@ -103,7 +103,9 @@ function selectChat(chat) {
 
     const other = getOtherParticipant(chat);
     activeChatName.innerText = other.nickname || other.name;
-    activeChatStatus.innerText = 'Online';
+
+    // Listen for other person's presence
+    listenForOtherPresence(other.uid);
 
     // Show Chat UI components
     const callBtn = document.getElementById('call-btn');
@@ -141,6 +143,12 @@ function closeChat() {
     activeChatStatus.innerText = '';
     chatBody.innerHTML = '';
 
+    // Unsubscribe presence listener
+    if (presenceListener) {
+        presenceListener();
+        presenceListener = null;
+    }
+
     const callBtn = document.getElementById('call-btn');
     if (callBtn) callBtn.style.display = 'none';
 
@@ -153,6 +161,27 @@ function closeChat() {
 
     exitSelectionMode();
     renderChatList();
+}
+
+let presenceListener = null;
+function listenForOtherPresence(otherUid) {
+    if (presenceListener) presenceListener();
+
+    presenceListener = window.db.collection('users').doc(otherUid)
+        .onSnapshot(doc => {
+            const data = doc.data();
+            if (data) {
+                if (data.status === 'online') {
+                    activeChatStatus.innerText = 'Online';
+                } else if (data.lastSeen) {
+                    const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
+                    const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    activeChatStatus.innerText = `Last seen at ${timeStr}`;
+                } else {
+                    activeChatStatus.innerText = 'Offline';
+                }
+            }
+        });
 }
 
 // Mark all unread messages from the other person as read
@@ -360,7 +389,7 @@ function listenForMessages() {
                     let tickHtml = '';
                     if (isSent) {
                         tickHtml = msg.read
-                            ? '<i class="fas fa-check-double" style="color:#53bdeb;margin-left:5px;"></i>'
+                            ? `<i class="fas fa-check-double" style="color:var(--primary-red);margin-left:5px;"></i>`
                             : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
                     }
 
@@ -394,7 +423,7 @@ function listenForMessages() {
                 let tickHtml = '';
                 if (isSent) {
                     if (msg.read) {
-                        tickHtml = '<i class="fas fa-check-double" style="color:#53bdeb;margin-left:5px;"></i>';
+                        tickHtml = `<i class="fas fa-check-double" style="color:var(--primary-red);margin-left:5px;"></i>`;
                     } else {
                         tickHtml = '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
                     }
