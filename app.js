@@ -111,6 +111,10 @@ function selectChat(chat) {
     activeChatImg.src = other.photoURL || `https://ui-avatars.com/api/?name=${other.name}&background=d32f2f&color=fff`;
     activeChatStatus.innerText = 'Online';
 
+    // Show Call button
+    const callBtn = document.getElementById('call-btn');
+    if (callBtn) callBtn.style.display = 'block';
+
     // Mobile View Toggle
     document.querySelector('.sidebar').classList.add('hide-mobile');
     document.querySelector('.main-chat').classList.add('show-mobile');
@@ -144,6 +148,10 @@ async function markMessagesAsRead(chatId) {
 document.getElementById('back-btn').onclick = () => {
     document.querySelector('.sidebar').classList.remove('hide-mobile');
     document.querySelector('.main-chat').classList.remove('show-mobile');
+
+    // Hide Call button when returning to chat list
+    const callBtn = document.getElementById('call-btn');
+    if (callBtn) callBtn.style.display = 'none';
 };
 
 // 4. Listen for Messages
@@ -225,6 +233,34 @@ function updateSendBtnIcon() {
     } else {
         sendBtn.className = 'fas fa-microphone footer-btn';
     }
+}
+
+// Emoji Picker Logic
+const emojiBtn = document.getElementById('emoji-btn');
+const emojiPicker = document.getElementById('emoji-picker');
+
+if (emojiBtn && emojiPicker) {
+    emojiBtn.onclick = (e) => {
+        e.stopPropagation();
+        emojiPicker.classList.toggle('hidden');
+    };
+
+    // Close picker when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+            emojiPicker.classList.add('hidden');
+        }
+    });
+
+    // Handle emoji click
+    const emojis = document.querySelectorAll('.emoji');
+    emojis.forEach(emoji => {
+        emoji.onclick = () => {
+            messageInput.value += emoji.innerText;
+            updateSendBtnIcon(); // Update send button state
+            messageInput.focus();
+        };
+    });
 }
 
 messageInput.oninput = updateSendBtnIcon;

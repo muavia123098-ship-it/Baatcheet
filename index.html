@@ -19,8 +19,6 @@
                     <span id="my-number-display" style="font-size: 13px; color: var(--text-secondary);"></span>
                 </div>
                 <div class="header-icons">
-                    <i class="fas fa-circle-notch"></i>
-                    <i class="fas fa-comment-alt" title="New Chat"></i>
                     <div class="menu-container">
                         <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
                         <div id="main-menu" class="dropdown-menu hidden">
@@ -57,7 +55,6 @@
                 </div>
                 <div class="header-icons">
                     <i class="fas fa-phone-alt" id="call-btn" title="Voice Call" style="display: none;"></i>
-                    <i class="fas fa-search"></i>
                     <i class="fas fa-ellipsis-v"></i>
                 </div>
             </header>
@@ -71,8 +68,25 @@
             </div>
 
             <footer class="chat-footer">
-                <i class="far fa-smile footer-btn"></i>
-                <i class="fas fa-paperclip footer-btn"></i>
+                <div style="position: relative;">
+                    <i class="far fa-smile footer-btn" id="emoji-btn"></i>
+
+                    <!-- Emoji Picker Popup -->
+                    <div id="emoji-picker" class="emoji-picker hidden">
+                        <span class="emoji">😀</span>
+                        <span class="emoji">😂</span>
+                        <span class="emoji">🥰</span>
+                        <span class="emoji">😎</span>
+                        <span class="emoji">😢</span>
+                        <span class="emoji">😡</span>
+                        <span class="emoji">👍</span>
+                        <span class="emoji">🙏</span>
+                        <span class="emoji">🎉</span>
+                        <span class="emoji">❤️</span>
+                        <span class="emoji">🔥</span>
+                        <span class="emoji">✨</span>
+                    </div>
+                </div>
                 <div class="input-area">
                     <input type="text" id="message-input" placeholder="Type a message">
                 </div>

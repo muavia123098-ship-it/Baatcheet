@@ -278,6 +278,34 @@ body {
     color: var(--accent-red);
 }
 
+/* Emoji Picker Styles */
+.emoji-picker {
+    position: absolute;
+    bottom: 40px;
+    left: 0;
+    background-color: var(--sidebar-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+    width: 180px;
+}
+
+.emoji {
+    font-size: 24px;
+    cursor: pointer;
+    text-align: center;
+    transition: transform 0.2s;
+}
+
+.emoji:hover {
+    transform: scale(1.2);
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
     width: 6px;
