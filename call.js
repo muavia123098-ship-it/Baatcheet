@@ -80,14 +80,10 @@ async function startCall(receiverId) {
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Calling...";
 
-    let callName = "Contact";
-    let callPhoto = "https://ui-avatars.com/api/?name=User&background=202c33&color=fff";
-
     if (activeChatData) {
         const other = getOtherParticipant(activeChatData);
         if (other) {
             callName = other.nickname || other.name || "Contact";
-            callPhoto = other.photoURL || `https://ui-avatars.com/api/?name=${callName}&background=d32f2f&color=fff`;
         }
     }
 
@@ -192,11 +188,7 @@ function listenForCalls() {
                             navigator.mediaSession.metadata = new MediaMetadata({
                                 title: 'Incoming Call',
                                 artist: callData.callerName || 'Baatcheet',
-                                album: 'Baatcheet Messenger',
-                                artwork: [
-                                    { src: callData.callerPhoto || 'logo.png', sizes: '96x96', type: 'image/png' },
-                                    { src: callData.callerPhoto || 'logo.png', sizes: '512x512', type: 'image/png' }
-                                ]
+                                album: 'Baatcheet Messenger'
                             });
                         }
                     }
@@ -225,7 +217,7 @@ function listenForCalls() {
                     }
 
                     // Log Missed Call
-                    addCallLog('missed', callData.callerId);
+                    addCallLog('missed_incoming', callData.callerId);
 
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
@@ -329,7 +321,14 @@ async function endCall() {
     }
 
     if (duration > 0 && otherParticipantId) {
-        addCallLog('answered', otherParticipantId, duration);
+        addCallLog(otherParticipantId === window.userData.uid ? 'incoming' : 'outgoing', otherParticipantId, duration);
+    } else if (duration === 0 && otherParticipantId) {
+        // If duration is 0, it means it was cancelled or missed
+        if (otherParticipantId === window.userData.uid) {
+            addCallLog('missed_incoming', otherParticipantId);
+        } else {
+            addCallLog('missed_outgoing', otherParticipantId);
+        }
     }
 
     endCallUI();
@@ -428,7 +427,11 @@ if (endCallBtn) endCallBtn.onclick = () => endCall();
 async function addCallLog(type, otherUserId, duration = null) {
     if (!window.userData || !otherUserId) return;
     const convId = [window.userData.uid, otherUserId].sort().join('_');
-    const text = type === 'missed' ? 'Missed Voice Call' : 'Voice Call';
+    let text = 'Voice Call';
+    if (type === 'missed_incoming') text = 'Missed Voice Call (Incoming)';
+    else if (type === 'missed_outgoing') text = 'Missed Voice Call (Outgoing)';
+    else if (type === 'incoming') text = 'Incoming Voice Call';
+    else if (type === 'outgoing') text = 'Outgoing Voice Call';
 
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({

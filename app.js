@@ -74,6 +74,17 @@ function initDOMRefs() {
     }
 
     // Voice Recording Listeners
+    if (nodes.chatBody) {
+        nodes.chatBody.onclick = (e) => {
+            if (!isSelectionMode) return;
+            const msgDiv = e.target.closest('.message');
+            if (msgDiv && msgDiv.dataset.id) {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleMessageSelection(msgDiv.dataset.id, msgDiv);
+            }
+        };
+    }
     if (nodes.stopRecordingBtn) nodes.stopRecordingBtn.onclick = stopRecording;
     if (nodes.deleteRecordingBtn) nodes.deleteRecordingBtn.onclick = cancelRecording;
     if (nodes.sendRecordingBtn) nodes.sendRecordingBtn.onclick = uploadAndSendAudio;
@@ -169,11 +180,10 @@ function renderChatList(filter = '') {
         div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
         div.onclick = () => selectChat(chat);
 
-        const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
 
         div.innerHTML = `
-            <img src="${other.photoURL || 'https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png'}" class="chat-item-img" onerror="this.src='https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png'">
-            <div class="chat-item-info">
+            <div class="chat-item-info" style="margin-left: 0;">
                 <div class="chat-item-top">
                     <span class="chat-item-name">${other.nickname || other.name || 'Unknown'}</span>
                     <span class="chat-item-time">${time}</span>
@@ -286,7 +296,7 @@ function listenForOtherPresence(otherUid) {
                     nodes.activeChatStatus.innerText = 'Online';
                 } else if (data.lastSeen) {
                     const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
-                    const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                     nodes.activeChatStatus.innerText = `Last seen at ${timeStr}`;
                 } else {
                     nodes.activeChatStatus.innerText = 'Offline';
@@ -352,8 +362,6 @@ async function requestNotificationPermission() {
 // These might be declared in contacts.js, so we use them directly or from window.
 (function () {
     const pModal = document.getElementById('profile-modal');
-    const eProfileImg = document.getElementById('edit-profile-img');
-    const ePhotoUrl = document.getElementById('edit-photo-url');
     const eProfileName = document.getElementById('edit-profile-name');
     const sProfileBtn = document.getElementById('save-profile-btn');
 
@@ -478,22 +486,34 @@ function listenForMessages() {
                 div.ontouchend = () => clearTimeout(longPressTimeout);
                 div.ontouchmove = () => clearTimeout(longPressTimeout);
 
-                // Regular Click
+                // Regular Click - Handled by delegation now, but we keep this to prevent default if needed
                 div.onclick = (e) => {
                     if (isSelectionMode) {
-                        handleSelectionInput(e);
+                        e.stopPropagation(); // Prevent duplicate trigger from delegation if handled here
+                        // toggleMessageSelection(msgId, div); // Let delegation handle it
                     }
                 };
 
                 // Special rendering for Call Logs
                 if (msg.type === 'call') {
                     div.className = `message call-log ${msg.callType || ''}`;
-                    const iconClass = msg.callType === 'missed' ? 'fa-phone-slash' : 'fa-phone';
+                    let iconClass = 'fa-phone';
+                    let iconColor = '#8696a0'; // Default Delivered/Outgoing grey
+
+                    if (msg.callType && msg.callType.includes('missed')) {
+                        iconClass = 'fa-phone-slash';
+                        iconColor = '#f15c6d'; // Missed Red
+                    } else if (msg.callType === 'incoming') {
+                        iconColor = '#34B7F1'; // Answered Blue
+                    } else if (msg.callType === 'outgoing') {
+                        iconColor = '#34B7F1'; // Answered Blue
+                    }
+
                     const timeStr = msg.timestamp
-                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
                         : '';
                     const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
-                    div.innerHTML = `<i class="fas ${iconClass}"></i> ${msg.text}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
+                    div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${msg.text}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
                     if (nodes.chatBody) nodes.chatBody.appendChild(div);
                     return;
                 }
@@ -502,7 +522,7 @@ function listenForMessages() {
                 if (msg.type === 'audio') {
                     div.className = `message ${isSent ? 'sent' : 'received'} audio-msg`;
                     const timeStr = msg.timestamp
-                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
                         : '...';
 
                     let tickHtml = '';
@@ -719,7 +739,12 @@ function cancelRecording() {
 }
 
 async function uploadAndSendAudio() {
-    if (!recordedAudioBlob || !activeChatId) return;
+    if (!recordedAudioBlob || !activeChatId) {
+        console.warn("Upload aborted: No blob or activeChatId", { recordedAudioBlob, activeChatId });
+        return;
+    }
+
+    console.log("Starting voice recording upload...", { size: recordedAudioBlob.size, type: recordedAudioBlob.type });
 
     try {
         if (nodes.sendRecordingBtn) {
@@ -728,15 +753,17 @@ async function uploadAndSendAudio() {
         }
 
         const fileName = `audio_${Date.now()}.webm`;
-        const storageRef = storage.ref(`audio_notes/${activeChatId}/${fileName}`);
+        const storageRef = window.storage.ref(`audio_notes/${activeChatId}/${fileName}`);
 
+        console.log("Uploading to storage path:", storageRef.fullPath);
         await storageRef.put(recordedAudioBlob);
         const downloadURL = await storageRef.getDownloadURL();
+        console.log("Upload success! URL:", downloadURL);
 
-        const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+        const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
 
         // Save as audio type message
-        await db.collection('conversations').doc(activeChatId).collection('messages').add({
+        await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
             type: 'audio',
             audioUrl: downloadURL,
             senderId: window.userData.uid,
@@ -744,15 +771,16 @@ async function uploadAndSendAudio() {
             read: false
         });
 
-        await db.collection('conversations').doc(activeChatId).update({
+        await window.db.collection('conversations').doc(activeChatId).update({
             lastMessage: '🎤 Voice Message',
             lastUpdate: timestamp
         });
 
+        console.log("Firestore update success!");
         cancelRecording();
     } catch (err) {
         console.error("Audio upload failed:", err);
-        alert("Voice message send nahi ho saka!");
+        alert("Voice message send nahi ho saka! (Error: " + err.message + ")");
     } finally {
         if (nodes.sendRecordingBtn) {
             nodes.sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
@@ -782,6 +810,7 @@ function stopTimer() {
 
 function enterSelectionMode(msgId, element) {
     isSelectionMode = true;
+    document.body.classList.add('selection-active');
     if (nodes.selectionHeader) nodes.selectionHeader.classList.remove('hidden');
     toggleMessageSelection(msgId, element);
 }
@@ -805,6 +834,7 @@ function toggleMessageSelection(msgId, element) {
 
 function exitSelectionMode() {
     isSelectionMode = false;
+    document.body.classList.remove('selection-active');
     selectedMessages.clear();
     if (nodes.selectionHeader) nodes.selectionHeader.classList.add('hidden');
     // Remove highlight from all messages

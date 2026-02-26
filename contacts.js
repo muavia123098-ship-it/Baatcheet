@@ -27,8 +27,8 @@ async function addContactByNumber(number, customName) {
             await convRef.set({
                 participants: [userData.uid, targetUser.uid],
                 participantsData: [
-                    { uid: userData.uid, name: userData.name, photoURL: userData.photoURL },
-                    { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL, nickname: customName }
+                    { uid: userData.uid, name: userData.name },
+                    { uid: targetUser.uid, name: targetUser.name, nickname: customName }
                 ],
                 lastMessage: '',
                 lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
