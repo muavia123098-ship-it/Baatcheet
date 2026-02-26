@@ -17,7 +17,9 @@ let remoteStream = null;
 let currentCallId = null;
 let incomingCallListener = null;
 
-// DOM Elements
+// Standardize globals
+const db = window.db;
+const auth = window.auth;
 const callBtn = document.getElementById('call-btn');
 const incomingCallModal = document.getElementById('incoming-call-modal');
 const activeCallModal = document.getElementById('active-call-modal');

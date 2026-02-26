@@ -28,6 +28,7 @@
 body {
     background-color: var(--bg-black);
     color: var(--text-primary);
+    min-height: 100vh;
     height: 100dvh;
     display: flex;
     overflow: hidden;

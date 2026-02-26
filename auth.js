@@ -12,12 +12,17 @@ let currentUser = null;
 
 // Google Login
 googleLoginBtn.onclick = async () => {
+    if (!window.auth || !window.provider) {
+        console.error("Firebase not initialized");
+        alert("System initializing... Please wait a second and try again.");
+        return;
+    }
     try {
         const result = await window.auth.signInWithPopup(window.provider);
         currentUser = result.user;
 
         // Check if user already exists in Firestore
-        const userDoc = await db.collection('users').doc(currentUser.uid).get();
+        const userDoc = await window.db.collection('users').doc(currentUser.uid).get();
         if (userDoc.exists) {
             // Already has an account, skip profile setup
             localStorage.setItem('baatcheet_user', JSON.stringify(userDoc.data()));
@@ -65,10 +70,10 @@ createAccountBtn.onclick = async () => {
             bio: bio,
             baatcheetNumber: uniqueNumber,
             email: currentUser.email,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            createdAt: window.firebase.firestore.FieldValue.serverTimestamp()
         };
 
-        await db.collection('users').doc(currentUser.uid).set(firestoreUserData);
+        await window.db.collection('users').doc(currentUser.uid).set(firestoreUserData);
         console.log("User data saved successfully!");
 
         // Data to be stored in localStorage (can be a subset or same as firestoreUserData)

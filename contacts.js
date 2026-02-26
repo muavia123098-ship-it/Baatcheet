@@ -1,5 +1,6 @@
 // Logic to add contacts by Baatcheet Number with validation
 async function addContactByNumber(number, customName) {
+    const userData = window.userData;
     if (number === userData.baatcheetNumber) {
         alert("You cannot add yourself!");
         return;
@@ -7,7 +8,7 @@ async function addContactByNumber(number, customName) {
 
     try {
         console.log("Searching for user:", number);
-        const usersRef = db.collection('users');
+        const usersRef = window.db.collection('users');
         const snapshot = await usersRef.where('baatcheetNumber', '==', number).get();
 
         if (snapshot.empty) {
@@ -19,7 +20,7 @@ async function addContactByNumber(number, customName) {
 
         // Check if conversation already exists
         const convId = [userData.uid, targetUser.uid].sort().join('_');
-        const convRef = db.collection('conversations').doc(convId);
+        const convRef = window.db.collection('conversations').doc(convId);
         const convDoc = await convRef.get();
 
         if (!convDoc.exists) {
@@ -30,7 +31,7 @@ async function addContactByNumber(number, customName) {
                     { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL, nickname: customName }
                 ],
                 lastMessage: '',
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
             });
         } else {
             // Fix for previous bug: If conversation exists but participants are corrupted
@@ -105,7 +106,7 @@ document.getElementById('add-contact-menu').onclick = openAddContactModal;
 
 document.getElementById('logout-menu').onclick = () => {
     localStorage.removeItem('baatcheet_user');
-    auth.signOut().then(() => {
+    window.auth.signOut().then(() => {
         window.location.href = 'login.html';
     });
 };

@@ -15,7 +15,6 @@
 let activeChatId = null;
 let activeChatData = null;
 let chats = [];
-
 // DOM Elements
 const chatList = document.getElementById('chat-list');
 const chatBody = document.getElementById('chat-body');
@@ -27,8 +26,9 @@ const activeChatStatus = document.getElementById('active-chat-status');
 
 // 1. Listen for Conversations (Chat List)
 function listenForChats() {
+    const userData = window.userData;
     console.log("Listening for chats for user UID:", userData.uid);
-    db.collection('conversations')
+    window.db.collection('conversations')
         .where('participants', 'array-contains', userData.uid)
         .onSnapshot(snapshot => {
             console.log("Chat Snapshot received. Docs count:", snapshot.docs.length);
@@ -84,10 +84,10 @@ function renderChatList(filter = '') {
 
 // Helper to get the other person in the chat
 function getOtherParticipant(chat) {
+    const userData = window.userData;
     if (chat.participantsData && userData) {
         // Find the participant that is NOT me
-        const other = chat.participantsData.find(p => p.uid !== userData.uid);
-        if (other) {
+        const other = chat.participantsData.find(p => p.uid !== userData.uid); if (other) {
             return other;
         }
     }
@@ -97,8 +97,10 @@ function getOtherParticipant(chat) {
 
 // 3. Select Chat
 function selectChat(chat) {
+    const userData = window.userData;
     activeChatId = chat.id;
     activeChatData = chat;
+
     const other = getOtherParticipant(chat);
     activeChatName.innerText = other.nickname || other.name;
     activeChatStatus.innerText = 'Online';
@@ -155,14 +157,15 @@ function closeChat() {
 
 // Mark all unread messages from the other person as read
 async function markMessagesAsRead(chatId) {
+    const userData = window.userData;
     try {
-        const unreadSnap = await db.collection('conversations').doc(chatId)
+        const unreadSnap = await window.db.collection('conversations').doc(chatId)
             .collection('messages')
             .where('senderId', '!=', userData.uid)
             .where('read', '==', false)
             .get();
 
-        const batch = db.batch();
+        const batch = window.db.batch();
         unreadSnap.docs.forEach(doc => {
             batch.update(doc.ref, { read: true });
         });
@@ -281,9 +284,10 @@ function showCallNotification(callerName) {
 // 4. Listen for Messages
 let messageListener = null;
 function listenForMessages() {
+    const userData = window.userData;
     if (messageListener) messageListener(); // Unsubscribe previous
 
-    messageListener = db.collection('conversations')
+    messageListener = window.db.collection('conversations')
         .doc(activeChatId)
         .collection('messages')
         .orderBy('timestamp', 'asc')
@@ -411,27 +415,33 @@ function listenForMessages() {
 
 // 5. Send Message
 async function sendMessage() {
+    const userData = window.userData;
     const text = messageInput.value.trim();
-    if (text && activeChatId) {
-        messageInput.value = '';
-        updateSendBtnIcon();
+    if (!text || !activeChatId) return;
 
-        const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+    messageInput.value = '';
+    updateSendBtnIcon();
 
-        // Add message to subcollection (read:false by default)
-        await db.collection('conversations').doc(activeChatId).collection('messages').add({
+    try {
+        await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
             text: text,
             senderId: userData.uid,
-            timestamp: timestamp,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             read: false
         });
 
-        // Update conversation metadata
-        await db.collection('conversations').doc(activeChatId).update({
+        await window.db.collection('conversations').doc(activeChatId).update({
             lastMessage: text,
-            lastUpdate: timestamp
+            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
         });
+    } catch (e) {
+        console.error("Error sending message:", e);
     }
+}
+
+// Attach send logic
+if (sendBtn) {
+    sendBtn.onclick = sendMessage;
 }
 
 // UI Handlers
