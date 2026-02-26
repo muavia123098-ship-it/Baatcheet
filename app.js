@@ -4,6 +4,8 @@ let activeChatData = null;
 let chats = [];
 let presenceListener = null;
 let messageListener = null;
+let typingTimeout = null;
+let isCurrentlyTyping = false;
 
 // DOM Cache
 let nodes = {};
@@ -43,14 +45,35 @@ function initDOMRefs() {
     if (nodes.messageInput) {
         const handleInput = () => {
             updateSendBtnIcon();
+
+            // Typing indicator logic
+            if (!isCurrentlyTyping) {
+                isCurrentlyTyping = true;
+                setTypingStatus(true);
+            }
+
+            if (typingTimeout) clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                isCurrentlyTyping = false;
+                setTypingStatus(false);
+            }, 3000);
         };
         nodes.messageInput.onkeyup = (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') {
+                sendMessage();
+                isCurrentlyTyping = false;
+                setTypingStatus(false);
+                if (typingTimeout) clearTimeout(typingTimeout);
+            }
             handleInput();
         };
         nodes.messageInput.oninput = handleInput;
         nodes.messageInput.onkeydown = handleInput;
         nodes.messageInput.onpaste = handleInput;
+        nodes.messageInput.onblur = () => {
+            isCurrentlyTyping = false;
+            setTypingStatus(false);
+        };
     }
     if (nodes.sendBtn) {
         nodes.sendBtn.onclick = () => {
@@ -182,13 +205,23 @@ function renderChatList(filter = '') {
 
         const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
 
+        const unreadKey = `unread_${userData.uid}`;
+        const hasUnread = chat[unreadKey] === true;
+
+        // Typing status in list
+        const isOtherTyping = chat[`typing_${other.uid}`];
+        const lastMsgText = isOtherTyping ? '<span class="typing-indicator-text">Typing...</span>' : (chat.lastMessage || 'Start a conversation');
+
         div.innerHTML = `
             <div class="chat-item-info" style="margin-left: 0;">
                 <div class="chat-item-top">
-                    <span class="chat-item-name">${other.nickname || other.name || 'Unknown'}</span>
+                    <div>
+                        <span class="chat-item-name">${other.nickname || other.name || 'Unknown'}</span>
+                        ${hasUnread ? '<span class="unread-dot"></span>' : ''}
+                    </div>
                     <span class="chat-item-time">${time}</span>
                 </div>
-                <div class="chat-item-msg">${chat.lastMessage || 'Start a conversation'}</div>
+                <div class="chat-item-msg">${lastMsgText}</div>
             </div>
         `;
         nodes.chatList.appendChild(div);
@@ -303,6 +336,35 @@ function listenForOtherPresence(otherUid) {
                 }
             }
         });
+
+    // Listen for typing status in the conversation document instead of user doc
+    // because typing is conversation-specific.
+    if (presenceListener) {
+        // We already have a listener for the user doc. 
+        // Let's add another one for the conversation to detect "Typing..."
+        window.db.collection('conversations').doc(activeChatId)
+            .onSnapshot(doc => {
+                const data = doc.data();
+                if (data && otherUid) {
+                    const isOtherTyping = data[`typing_${otherUid}`];
+                    if (isOtherTyping) {
+                        nodes.activeChatStatus.innerText = 'Typing...';
+                        nodes.activeChatStatus.style.color = '#43c966';
+                    } else {
+                        // Re-trigger standard status logic if not typing
+                        // (Usually the snapshot above will trigger, but we ensure consistency)
+                        nodes.activeChatStatus.style.color = 'var(--text-secondary)';
+                    }
+                }
+            });
+    }
+}
+
+function setTypingStatus(isTyping) {
+    if (!activeChatId || !window.userData) return;
+    window.db.collection('conversations').doc(activeChatId).update({
+        [`typing_${window.userData.uid}`]: isTyping
+    }).catch(err => console.warn("Typing status update failed:", err));
 }
 
 // Mark all unread messages from the other person as read
@@ -319,6 +381,11 @@ async function markMessagesAsRead(chatId) {
         unreadSnap.docs.forEach(doc => {
             batch.update(doc.ref, { read: true });
         });
+
+        // Clear unread flag for me
+        const convRef = window.db.collection('conversations').doc(chatId);
+        batch.update(convRef, { [`unread_${userData.uid}`]: false });
+
         await batch.commit();
     } catch (e) {
         console.warn('markMessagesAsRead error:', e.message);
@@ -496,24 +563,28 @@ function listenForMessages() {
 
                 // Special rendering for Call Logs
                 if (msg.type === 'call') {
-                    div.className = `message call-log ${msg.callType || ''}`;
+                    div.className = `message call-log`;
                     let iconClass = 'fa-phone';
-                    let iconColor = '#8696a0'; // Default Delivered/Outgoing grey
+                    let iconColor = '#8696a0'; // Default
+                    let callText = 'Voice Call';
 
-                    if (msg.callType && msg.callType.includes('missed')) {
+                    const isICalled = msg.callerId === userData.uid;
+                    const isIMissed = msg.callStatus === 'missed';
+
+                    if (isIMissed) {
                         iconClass = 'fa-phone-slash';
                         iconColor = '#f15c6d'; // Missed Red
-                    } else if (msg.callType === 'incoming') {
+                        callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
+                    } else {
                         iconColor = '#34B7F1'; // Answered Blue
-                    } else if (msg.callType === 'outgoing') {
-                        iconColor = '#34B7F1'; // Answered Blue
+                        callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
                     }
 
                     const timeStr = msg.timestamp
                         ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
                         : '';
                     const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
-                    div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${msg.text}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
+                    div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${callText}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
                     if (nodes.chatBody) nodes.chatBody.appendChild(div);
                     return;
                 }
@@ -561,10 +632,10 @@ function listenForMessages() {
                 //   Double blue ✓✓ = sent & read by recipient
                 let tickHtml = '';
                 if (isSent) {
-                    if (msg.read) {
-                        tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`;
+                    if (msg.read === true) {
+                        tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;" title="Read"></i>`;
                     } else {
-                        tickHtml = '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
+                        tickHtml = `<i class="fas fa-check" style="color:#8696a0;margin-left:5px;" title="Delivered"></i>`;
                     }
                 }
 
@@ -577,7 +648,9 @@ function listenForMessages() {
             if (nodes.chatBody) nodes.chatBody.scrollTop = nodes.chatBody.scrollHeight;
 
             // Auto-mark incoming as read while the chat is open
-            markMessagesAsRead(activeChatId);
+            if (activeChatId) {
+                markMessagesAsRead(activeChatId);
+            }
         });
 }
 
@@ -613,10 +686,16 @@ async function sendMessage() {
             read: false
         });
 
-        await window.db.collection('conversations').doc(activeChatId).update({
+        const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
+        const updateData = {
             lastMessage: text,
             lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+        if (other && other.uid) {
+            updateData[`unread_${other.uid}`] = true;
+        }
+
+        await window.db.collection('conversations').doc(activeChatId).update(updateData);
         console.log("Message sent successfully!");
     } catch (e) {
         console.error("Error sending message:", e);
@@ -703,7 +782,7 @@ async function startRecording() {
         };
 
         mediaRecorder.onstop = () => {
-            recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            recordedAudioBlob = new Blob(audioChunks, { type: audioChunks[0]?.type || 'audio/webm' });
             stream.getTracks().forEach(track => track.stop());
 
             // Show Send, Hide Stop
@@ -753,39 +832,74 @@ async function uploadAndSendAudio() {
         }
 
         const fileName = `audio_${Date.now()}.webm`;
-        const storageRef = window.storage.ref(`audio_notes/${activeChatId}/${fileName}`);
+        // Explicitly child() for safety
+        const storageRef = window.storage.ref().child(`audio_notes/${activeChatId}/${fileName}`);
 
         console.log("Uploading to storage path:", storageRef.fullPath);
-        await storageRef.put(recordedAudioBlob);
-        const downloadURL = await storageRef.getDownloadURL();
-        console.log("Upload success! URL:", downloadURL);
 
-        const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
+        const uploadTask = storageRef.put(recordedAudioBlob);
 
-        // Save as audio type message
-        await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
-            type: 'audio',
-            audioUrl: downloadURL,
-            senderId: window.userData.uid,
-            timestamp: timestamp,
-            read: false
-        });
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                console.log('Voice Upload: ' + Math.round(progress) + '% done');
+            },
+            (error) => {
+                console.error("Upload Error:", error);
+                alert("Upload nakam raha: " + error.message);
+                resetUploadUI();
+            },
+            async () => {
+                try {
+                    const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                    console.log("Upload success! URL:", downloadURL);
 
-        await window.db.collection('conversations').doc(activeChatId).update({
-            lastMessage: '🎤 Voice Message',
-            lastUpdate: timestamp
-        });
+                    const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
+                    const timestamp = window.firebase.firestore.FieldValue.serverTimestamp();
 
-        console.log("Firestore update success!");
-        cancelRecording();
+                    await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
+                        type: 'audio',
+                        audioUrl: downloadURL,
+                        senderId: window.userData.uid,
+                        timestamp: timestamp,
+                        read: false
+                    });
+
+                    const updateData = {
+                        lastMessage: '🎤 Voice Message',
+                        lastUpdate: timestamp
+                    };
+                    if (other && other.uid) {
+                        updateData[`unread_${other.uid}`] = true;
+                    }
+
+                    await window.db.collection('conversations').doc(activeChatId).update(updateData);
+
+                    // Reset typing
+                    isCurrentlyTyping = false;
+                    setTypingStatus(false);
+
+                    console.log("Firestore success!");
+                    cancelRecording();
+                } catch (err) {
+                    console.error("Firestore update failed:", err);
+                    alert("Message record nahi ho saka: " + err.message);
+                } finally {
+                    resetUploadUI();
+                }
+            }
+        );
     } catch (err) {
-        console.error("Audio upload failed:", err);
-        alert("Voice message send nahi ho saka! (Error: " + err.message + ")");
-    } finally {
-        if (nodes.sendRecordingBtn) {
-            nodes.sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
-            nodes.sendRecordingBtn.classList.add('fa-paper-plane');
-        }
+        console.error("Critical Upload Error:", err);
+        alert("Audio send nahi ho saka!");
+        resetUploadUI();
+    }
+}
+
+function resetUploadUI() {
+    if (nodes.sendRecordingBtn) {
+        nodes.sendRecordingBtn.classList.remove('fa-spinner', 'fa-spin');
+        nodes.sendRecordingBtn.classList.add('fa-paper-plane');
     }
 }
 

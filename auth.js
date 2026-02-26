@@ -131,11 +131,12 @@ function managePresence() {
 
     // Handle visibility change (tab background/foreground)
     document.addEventListener('visibilitychange', () => {
-        const status = document.visibilityState === 'visible' ? 'online' : 'offline';
+        const isVisible = document.visibilityState === 'visible';
+        const status = isVisible ? 'online' : 'offline';
         userRef.update({
             status: status,
             lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
-        });
+        }).catch(err => console.warn("Presence update failed:", err));
     });
 }
 

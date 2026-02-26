@@ -99,6 +99,7 @@ async function startCall(receiverId) {
 
         currentCallId = callDoc.id;
         otherParticipantId = receiverId;
+        window.amICaller = true; // Track who started the call
 
         // Get candidates for caller, save to db
         pc.onicecandidate = (event) => {
@@ -201,6 +202,7 @@ function listenForCalls() {
                     // Show incoming call UI
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
                     incomingCallModal.classList.remove('hidden');
+                    window.amICaller = false; // I am the receiver
 
                     // Setup active mode UI for later
                     document.getElementById('active-call-name').innerText = callData.callerName;
@@ -216,8 +218,11 @@ function listenForCalls() {
                         ringtoneAudio.currentTime = 0;
                     }
 
-                    // Log Missed Call
-                    addCallLog('missed_incoming', callData.callerId);
+                    // Log Missed Call (Only caller logs it as missed_outgoing, or receiver as missed_incoming)
+                    // Actually, let's have only one entry. If it's removed and not answered, it's missed.
+                    if (window.userData.uid === callData.receiverId) {
+                        addCallLog('missed', callData.callerId, null, callData.callerId, callData.receiverId);
+                    }
 
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
@@ -280,8 +285,10 @@ async function answerCall(callId) {
         callStatus.innerText = "Connected";
         callStatus.style.color = "#00a884";
 
-        // Add Call Log to Chat
-        addCallLog('answered', callData.callerId);
+        // Add Call Log to Chat (Single entry for answered call)
+        if (window.userData.uid === callData.receiverId) {
+            addCallLog('answered', callData.callerId, null, callData.callerId, callData.receiverId);
+        }
 
         // Listen for caller ICE candidates
         offerCandidates.onSnapshot((snapshot) => {
@@ -321,13 +328,14 @@ async function endCall() {
     }
 
     if (duration > 0 && otherParticipantId) {
-        addCallLog(otherParticipantId === window.userData.uid ? 'incoming' : 'outgoing', otherParticipantId, duration);
+        // Log the duration. Only one user needs to do this, ideally caller on disconnect.
+        if (window.amICaller) {
+            addCallLog('answered', otherParticipantId, duration, window.userData.uid, otherParticipantId);
+        }
     } else if (duration === 0 && otherParticipantId) {
-        // If duration is 0, it means it was cancelled or missed
-        if (otherParticipantId === window.userData.uid) {
-            addCallLog('missed_incoming', otherParticipantId);
-        } else {
-            addCallLog('missed_outgoing', otherParticipantId);
+        // Cancelled by caller before answer
+        if (window.amICaller) {
+            addCallLog('missed', otherParticipantId, null, window.userData.uid, otherParticipantId);
         }
     }
 
@@ -352,6 +360,7 @@ function endCallUI() {
     currentCallId = null;
     callStartTime = null;
     otherParticipantId = null;
+    window.amICaller = null;
 
     // Reset States
     isMuted = false;
@@ -424,30 +433,30 @@ if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
 if (declineCallBtn) declineCallBtn.onclick = () => endCall();
 if (endCallBtn) endCallBtn.onclick = () => endCall();
 // Helper to add call record to chat
-async function addCallLog(type, otherUserId, duration = null) {
+// Helper to add call record to chat
+async function addCallLog(type, otherUserId, duration = null, callerId = null, receiverId = null) {
     if (!window.userData || !otherUserId) return;
     const convId = [window.userData.uid, otherUserId].sort().join('_');
-    let text = 'Voice Call';
-    if (type === 'missed_incoming') text = 'Missed Voice Call (Incoming)';
-    else if (type === 'missed_outgoing') text = 'Missed Voice Call (Outgoing)';
-    else if (type === 'incoming') text = 'Incoming Voice Call';
-    else if (type === 'outgoing') text = 'Outgoing Voice Call';
 
+    // We store minimal info and IDs so app.js can render "Incoming" or "Outgoing" correctly for each user
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({
-            text: text,
+            text: 'Voice Call',
             senderId: window.userData.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type: 'call',
-            callType: type, // 'answered' or 'missed'
+            callStatus: type, // 'answered' or 'missed'
+            callerId: callerId || (window.amICaller ? window.userData.uid : otherUserId),
+            receiverId: receiverId || (window.amICaller ? otherUserId : window.userData.uid),
             duration: duration,
             read: true
         });
 
-        // Also update last message in conversation
+        // Update last message in conversation
         await db.collection('conversations').doc(convId).update({
-            lastMessage: text,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            lastMessage: '📞 Voice Call',
+            lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
+            [`unread_${receiverId}`]: true
         });
     } catch (e) {
         console.error("Error adding call log:", e);
