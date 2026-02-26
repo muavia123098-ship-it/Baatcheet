@@ -13,7 +13,7 @@ let currentUser = null;
 // Google Login
 googleLoginBtn.onclick = async () => {
     try {
-        const result = await auth.signInWithPopup(provider);
+        const result = await window.auth.signInWithPopup(window.provider);
         currentUser = result.user;
 
         // Check if user already exists in Firestore

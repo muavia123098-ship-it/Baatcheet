@@ -10,10 +10,10 @@ const firebaseConfig = {
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
-const provider = new firebase.auth.GoogleAuthProvider();
+window.auth = firebase.auth();
+window.db = firebase.firestore();
+window.storage = firebase.storage();
+window.provider = new firebase.auth.GoogleAuthProvider();
 
 // Global User Data
 window.userData = JSON.parse(localStorage.getItem('baatcheet_user'));

@@ -1,17 +1,16 @@
 // Populate Sidebar Header
-// userData is set globally in firebase-config.js
-if (typeof userData === 'undefined') {
-    var userData = window.userData;
-}
-
-if (userData) {
-    if (document.getElementById('my-name-display')) {
-        document.getElementById('my-name-display').innerText = userData.name;
+// window.userData is provided by firebase-config.js. We use a local shorthand if needed.
+(function () {
+    const uData = window.userData;
+    if (uData) {
+        if (document.getElementById('my-name-display')) {
+            document.getElementById('my-name-display').innerText = uData.name;
+        }
+        if (document.getElementById('my-number-display')) {
+            document.getElementById('my-number-display').innerText = uData.baatcheetNumber;
+        }
     }
-    if (document.getElementById('my-number-display')) {
-        document.getElementById('my-number-display').innerText = userData.baatcheetNumber;
-    }
-}
+})();
 
 let activeChatId = null;
 let activeChatData = null;
@@ -202,59 +201,62 @@ async function requestNotificationPermission() {
 }
 
 // Profile Editing Logic
-// profileModal, editProfileName, saveProfileBtn are often declared in contacts.js or auth.js
-// We use window. to ensure we don't redeclare or we check existence
-if (typeof profileModal === 'undefined') {
-    var profileModal = document.getElementById('profile-modal');
-}
-const editProfileImg = document.getElementById('edit-profile-img');
-const editPhotoUrl = document.getElementById('edit-photo-url');
-const editProfileName = document.getElementById('edit-profile-name');
-const saveProfileBtn = document.getElementById('save-profile-btn');
+// These might be declared in contacts.js, so we use them directly or from window.
+(function () {
+    const pModal = document.getElementById('profile-modal');
+    const eProfileImg = document.getElementById('edit-profile-img');
+    const ePhotoUrl = document.getElementById('edit-photo-url');
+    const eProfileName = document.getElementById('edit-profile-name');
+    const sProfileBtn = document.getElementById('save-profile-btn');
 
-function openProfileModal() {
-    if (!userData) return;
-    editProfileName.value = userData.name || "";
-    profileModal.classList.remove('hidden');
-}
+    window.openProfileModal = function () {
+        const uData = window.userData;
+        if (!uData) return;
+        if (eProfileName) eProfileName.value = uData.name || "";
+        if (pModal) pModal.classList.remove('hidden');
+    };
 
-async function saveProfile() {
-    const newName = editProfileName.value.trim();
+    window.saveProfile = async function () {
+        const uData = window.userData;
+        if (!eProfileName || !sProfileBtn) return;
+        const newName = eProfileName.value.trim();
 
-    if (!newName) {
-        alert("Pehle apna naam enter karein!");
-        return;
+        if (!newName) {
+            alert("Pehle apna naam enter karein!");
+            return;
+        }
+
+        try {
+            sProfileBtn.innerText = "Saving...";
+            sProfileBtn.disabled = true;
+
+            await db.collection('users').doc(uData.uid).update({
+                name: newName
+            });
+
+            // Update local memory and UI
+            uData.name = newName;
+            localStorage.setItem('baatcheet_user', JSON.stringify(uData));
+
+            // Update Sidebar Header UI
+            const nameDisp = document.getElementById('my-name-display');
+            if (nameDisp) nameDisp.innerText = newName;
+
+            alert("Profile updated successfully!");
+            if (pModal) pModal.classList.add('hidden');
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            alert("Profile update failed: " + error.message);
+        } finally {
+            sProfileBtn.innerText = "Save Changes";
+            sProfileBtn.disabled = false;
+        }
+    };
+
+    if (sProfileBtn) {
+        sProfileBtn.onclick = window.saveProfile;
     }
-
-    try {
-        saveProfileBtn.innerText = "Saving...";
-        saveProfileBtn.disabled = true;
-
-        await db.collection('users').doc(userData.uid).update({
-            name: newName
-        });
-
-        // Update local memory and UI
-        userData.name = newName;
-        localStorage.setItem('baatcheet_user', JSON.stringify(userData));
-
-        // Update Sidebar Header UI
-        document.getElementById('my-name-display').innerText = newName;
-
-        alert("Profile updated successfully!");
-        profileModal.classList.add('hidden');
-    } catch (error) {
-        console.error("Error updating profile:", error);
-        alert("Profile update failed: " + error.message);
-    } finally {
-        saveProfileBtn.innerText = "Save Changes";
-        saveProfileBtn.disabled = false;
-    }
-}
-
-if (saveProfileBtn) {
-    saveProfileBtn.onclick = saveProfile;
-}
+})();
 
 // Show Background Notification
 function showCallNotification(callerName) {
@@ -470,10 +472,9 @@ if (emojiBtn && emojiPicker) {
 }
 
 // --- Voice Recording Logic ---
-// currentUser is already declared in auth.js
-if (typeof currentUser === 'undefined') {
-    var currentUser = null;
-}
+// We use window.currentUser if defined in auth.js
+const recordingOverlay = document.getElementById('recording-overlay');
+const recordingTimer = document.getElementById('recording-timer');
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingTimerInterval = null;
