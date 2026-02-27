@@ -497,25 +497,27 @@ function showCallNotification(callerName) {
 
 // 4. Listen for Messages
 function listenForMessages() {
-    const userData = window.userData;
+    console.log("listenForMessages: Starting listener for", activeChatId);
     if (messageListener) messageListener(); // Unsubscribe previous
 
     messageListener = window.db.collection('conversations')
         .doc(activeChatId)
         .collection('messages')
         .orderBy('timestamp', 'asc')
-        .onSnapshot(snapshot => {
+        .onSnapshot({ includeMetadataChanges: true }, snapshot => {
+            const userData = window.userData;
+            console.log(`Messages Snapshot from ${snapshot.metadata.fromCache ? 'cache' : 'server'}: ${snapshot.size} messages`);
             if (nodes.chatBody) nodes.chatBody.innerHTML = '';
             snapshot.docs.forEach(doc => {
                 const msg = doc.data();
                 const msgId = doc.id;
 
                 // Skip if deleted for this user
-                if (msg.deletedFor && msg.deletedFor.includes(userData.uid)) {
+                if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
                     return;
                 }
 
-                const isSent = msg.senderId === userData.uid;
+                const isSent = userData && msg.senderId === userData.uid;
                 const div = document.createElement('div');
                 div.id = `msg-${msgId}`;
                 div.dataset.id = msgId;
@@ -662,6 +664,13 @@ function listenForMessages() {
             // Auto-mark incoming as read while the chat is open
             if (activeChatId) {
                 markMessagesAsRead(activeChatId);
+            }
+        }, error => {
+            console.error("Messages Listener Error:", error);
+            if (nodes.chatBody) {
+                nodes.chatBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--primary-red);">
+                    Error loading messages: ${error.message}
+                </div>`;
             }
         });
 }
