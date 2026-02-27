@@ -364,23 +364,32 @@ function setTypingStatus(isTyping) {
 // Mark all unread messages from the other person as read
 async function markMessagesAsRead(chatId) {
     const userData = window.userData;
+    if (!userData) return;
     try {
+        // Inequality filters on multiple fields require an index.
+        // We avoid it by only filtering 'read' and checking senderId in JS.
         const unreadSnap = await window.db.collection('conversations').doc(chatId)
             .collection('messages')
-            .where('senderId', '!=', userData.uid)
             .where('read', '==', false)
             .get();
 
         const batch = window.db.batch();
+        let count = 0;
         unreadSnap.docs.forEach(doc => {
-            batch.update(doc.ref, { read: true });
+            const msg = doc.data();
+            if (msg.senderId !== userData.uid) {
+                batch.update(doc.ref, { read: true });
+                count++;
+            }
         });
 
         // Clear unread flag for me
         const convRef = window.db.collection('conversations').doc(chatId);
         batch.update(convRef, { [`unread_${userData.uid}`]: false });
 
-        await batch.commit();
+        if (count > 0 || unreadSnap.size > 0) {
+            await batch.commit();
+        }
     } catch (e) {
         console.warn('markMessagesAsRead error:', e.message);
     }
@@ -507,117 +516,125 @@ function listenForMessages() {
         .onSnapshot({ includeMetadataChanges: true }, snapshot => {
             const userData = window.userData;
             console.log(`Messages Snapshot from ${snapshot.metadata.fromCache ? 'cache' : 'server'}: ${snapshot.size} messages`);
-            if (nodes.chatBody) nodes.chatBody.innerHTML = '';
+            if (nodes.chatBody) {
+                nodes.chatBody.innerHTML = '';
+                // Visible Debug Message
+                const debugDiv = document.createElement('div');
+                debugDiv.style = "font-size:10px; color:var(--text-secondary); text-align:center; padding:5px; opacity:0.5;";
+                debugDiv.innerText = `Snapshot Sync: ${snapshot.size} messages (${snapshot.metadata.fromCache ? 'cache' : 'server'})`;
+                nodes.chatBody.appendChild(debugDiv);
+            }
+
             snapshot.docs.forEach(doc => {
-                const msg = doc.data();
-                const msgId = doc.id;
+                try {
+                    const msg = doc.data();
+                    const msgId = doc.id;
 
-                // Skip if deleted for this user
-                if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
-                    return;
-                }
+                    // Skip if deleted for this user
+                    if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
+                        return;
+                    }
 
-                const isSent = userData && msg.senderId === userData.uid;
-                const div = document.createElement('div');
-                div.id = `msg-${msgId}`;
-                div.dataset.id = msgId;
+                    const isSent = userData && msg.senderId === userData.uid;
+                    const div = document.createElement('div');
+                    div.id = `msg-${msgId}`;
+                    div.dataset.id = msgId;
 
-                // --- Interaction Handlers ---
-                const handleSelectionInput = (e) => {
-                    if (isSelectionMode) {
+                    // --- Interaction Handlers ---
+                    const handleSelectionInput = (e) => {
+                        if (isSelectionMode) {
+                            e.preventDefault();
+                            toggleMessageSelection(msgId, div);
+                        }
+                    };
+
+                    // Desktop Right-Click
+                    div.oncontextmenu = (e) => {
                         e.preventDefault();
-                        toggleMessageSelection(msgId, div);
-                    }
-                };
-
-                // Desktop Right-Click
-                div.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    if (!isSelectionMode) {
-                        enterSelectionMode(msgId, div);
-                    }
-                };
-
-                // Mobile Long-Press
-                div.ontouchstart = (e) => {
-                    if (isSelectionMode) return;
-                    longPressTimeout = setTimeout(() => {
-                        enterSelectionMode(msgId, div);
-                    }, 600);
-                };
-
-                div.ontouchend = () => clearTimeout(longPressTimeout);
-                div.ontouchmove = () => clearTimeout(longPressTimeout);
-
-                // Regular Click - Handled by delegation now, but we keep this to prevent default if needed
-                div.onclick = (e) => {
-                    if (isSelectionMode) {
-                        e.stopPropagation(); // Prevent duplicate trigger from delegation if handled here
-                        // toggleMessageSelection(msgId, div); // Let delegation handle it
-                    }
-                };
-
-                // Special rendering for Call Logs
-                if (msg.type === 'call') {
-                    div.className = `message call-log`;
-                    let iconClass = 'fa-phone';
-                    let iconColor = '#8696a0'; // Default
-                    let callText = msg.text || 'Voice Call';
-
-                    // Debugging info (hidden in console)
-                    console.log(`Rendering Call Log [${msg.id}]:`, {
-                        callerId: msg.callerId,
-                        myUid: userData.uid,
-                        status: msg.callStatus,
-                        text: msg.text
-                    });
-
-                    if (msg.callerId) {
-                        const isICalled = msg.callerId === userData.uid;
-                        const isIMissed = msg.callStatus === 'missed';
-
-                        if (isIMissed) {
-                            iconClass = 'fa-phone-slash';
-                            iconColor = '#f15c6d'; // Missed Red
-                            callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
-                        } else {
-                            iconColor = '#34B7F1'; // Answered Blue
-                            callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
+                        if (!isSelectionMode) {
+                            enterSelectionMode(msgId, div);
                         }
-                    } else if (msg.text) {
-                        // Fallback for legacy logs
-                        if (msg.text.toLowerCase().includes('missed')) {
-                            iconClass = 'fa-phone-slash';
-                            iconColor = '#f15c6d';
-                        } else {
-                            iconColor = '#34B7F1';
+                    };
+
+                    // Mobile Long-Press
+                    div.ontouchstart = (e) => {
+                        if (isSelectionMode) return;
+                        longPressTimeout = setTimeout(() => {
+                            enterSelectionMode(msgId, div);
+                        }, 600);
+                    };
+
+                    div.ontouchend = () => clearTimeout(longPressTimeout);
+                    div.ontouchmove = () => clearTimeout(longPressTimeout);
+
+                    // Regular Click - Handled by delegation now, but we keep this to prevent default if needed
+                    div.onclick = (e) => {
+                        if (isSelectionMode) {
+                            e.stopPropagation(); // Prevent duplicate trigger from delegation if handled here
+                            // toggleMessageSelection(msgId, div); // Let delegation handle it
                         }
+                    };
+
+                    // Special rendering for Call Logs
+                    if (msg.type === 'call') {
+                        div.className = `message call-log`;
+                        let iconClass = 'fa-phone';
+                        let iconColor = '#8696a0'; // Default
+                        let callText = msg.text || 'Voice Call';
+
+                        // Debugging info
+                        console.log(`Rendering Call Log [${msgId}]:`, {
+                            callerId: msg.callerId,
+                            myUid: userData ? userData.uid : 'null',
+                            status: msg.callStatus
+                        });
+
+                        if (msg.callerId) {
+                            const isICalled = msg.callerId === userData.uid;
+                            const isIMissed = msg.callStatus === 'missed';
+
+                            if (isIMissed) {
+                                iconClass = 'fa-phone-slash';
+                                iconColor = '#f15c6d'; // Missed Red
+                                callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
+                            } else {
+                                iconColor = '#34B7F1'; // Answered Blue
+                                callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
+                            }
+                        } else if (msg.text) {
+                            // Fallback for legacy logs
+                            if (msg.text.toLowerCase().includes('missed')) {
+                                iconClass = 'fa-phone-slash';
+                                iconColor = '#f15c6d';
+                            } else {
+                                iconColor = '#34B7F1';
+                            }
+                        }
+
+                        const timeStr = msg.timestamp
+                            ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+                            : '';
+                        const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
+                        div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${callText}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
+                        if (nodes.chatBody) nodes.chatBody.appendChild(div);
+                        return;
                     }
 
-                    const timeStr = msg.timestamp
-                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                        : '';
-                    const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
-                    div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${callText}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
-                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                    return;
-                }
+                    // Special rendering for Voice Messages
+                    if (msg.type === 'audio') {
+                        div.className = `message ${isSent ? 'sent' : 'received'} audio-msg`;
+                        const timeStr = msg.timestamp
+                            ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+                            : '...';
 
-                // Special rendering for Voice Messages
-                if (msg.type === 'audio') {
-                    div.className = `message ${isSent ? 'sent' : 'received'} audio-msg`;
-                    const timeStr = msg.timestamp
-                        ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                        : '...';
+                        let tickHtml = '';
+                        if (isSent) {
+                            tickHtml = msg.read
+                                ? `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`
+                                : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
+                        }
 
-                    let tickHtml = '';
-                    if (isSent) {
-                        tickHtml = msg.read
-                            ? `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`
-                            : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
-                    }
-
-                    div.innerHTML = `
+                        div.innerHTML = `
                         <div class="audio-player">
                             <i class="fas fa-play play-btn" onclick="this.nextElementSibling.paused ? (this.nextElementSibling.play(), this.classList.replace('fa-play', 'fa-pause')) : (this.nextElementSibling.pause(), this.classList.replace('fa-pause', 'fa-play'))"></i>
                             <audio src="${msg.audioUrl}" onended="this.previousElementSibling.classList.replace('fa-pause', 'fa-play')"></audio>
@@ -630,34 +647,41 @@ function listenForMessages() {
                         </div>
                         <div class="msg-time">${timeStr}${tickHtml}</div>
                     `;
-                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                    return;
-                }
-
-                div.className = `message ${isSent ? 'sent' : 'received'}`;
-
-                const timeStr = msg.timestamp
-                    ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : '...';
-
-                // Tick logic:
-                //   No tick        = received message (not mine)
-                //   Single grey ✓  = sent, not yet read
-                //   Double blue ✓✓ = sent & read by recipient
-                let tickHtml = '';
-                if (isSent) {
-                    if (msg.read === true) {
-                        tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;" title="Read"></i>`;
-                    } else {
-                        tickHtml = `<i class="fas fa-check" style="color:#8696a0;margin-left:5px;" title="Delivered"></i>`;
+                        if (nodes.chatBody) nodes.chatBody.appendChild(div);
+                        return;
                     }
-                }
 
-                div.innerHTML = `
+                    div.className = `message ${isSent ? 'sent' : 'received'}`;
+
+                    let timeStr = '...';
+                    if (msg.timestamp) {
+                        try {
+                            const date = msg.timestamp.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp.seconds * 1000);
+                            timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } catch (e) { timeStr = '...'; }
+                    }
+
+                    // Tick logic:
+                    //   No tick        = received message (not mine)
+                    //   Single grey ✓  = sent, not yet read
+                    //   Double blue ✓✓ = sent & read by recipient
+                    let tickHtml = '';
+                    if (isSent) {
+                        if (msg.read === true) {
+                            tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;" title="Read"></i>`;
+                        } else {
+                            tickHtml = `<i class="fas fa-check" style="color:#8696a0;margin-left:5px;" title="Delivered"></i>`;
+                        }
+                    }
+
+                    div.innerHTML = `
                     ${msg.text}
                     <div class="msg-time">${timeStr}${tickHtml}</div>
                 `;
-                if (nodes.chatBody) nodes.chatBody.appendChild(div);
+                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
+                } catch (err) {
+                    console.error("Error rendering individual message:", doc.id, err);
+                }
             });
             if (nodes.chatBody) nodes.chatBody.scrollTop = nodes.chatBody.scrollHeight;
 
