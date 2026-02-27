@@ -55,6 +55,9 @@ function initDOMRefs() {
                 isCurrentlyTyping = false;
                 setTypingStatus(false);
             }, 3000);
+
+            // Update icon
+            updateSendBtnIcon();
         };
         nodes.messageInput.onkeyup = (e) => {
             if (e.key === 'Enter') {
@@ -111,6 +114,18 @@ function initDOMRefs() {
     initEmojiPicker();
 }
 
+function updateSendBtnIcon() {
+    if (!nodes.messageInput || !nodes.sendBtn) return;
+    const icon = nodes.sendBtn.querySelector('i');
+    if (!icon) return;
+
+    if (nodes.messageInput.value.trim() !== '') {
+        icon.className = 'fas fa-paper-plane';
+    } else {
+        icon.className = 'fas fa-microphone';
+    }
+}
+
 function updateHeaderUI() {
     const uData = window.userData;
     if (uData) {
@@ -148,6 +163,9 @@ function listenForChats(authUid) {
         return;
     }
     console.log("Listening for chats for user UID:", uid);
+
+    // We remove .orderBy to avoid requiring a composite index immediately.
+    // Sorting will be done in memory.
     window.db.collection('conversations')
         .where('participants', 'array-contains', uid)
         .onSnapshot(snapshot => {
@@ -156,11 +174,17 @@ function listenForChats(authUid) {
                 id: doc.id,
                 ...doc.data()
             }));
-            console.log("Chats array updated:", chats);
+
+            // Sort in memory by lastUpdate
+            chats.sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
+
+            console.log("Chats array updated and sorted:", chats);
             renderChatList();
         }, error => {
             console.error("Chat Listener Error:", error);
-            alert("Chat listener failed: " + error.message);
+            if (error.message.includes("index")) {
+                console.warn("INDEX ERROR: Please create the index via the link in the console to enable server-side sorting.");
+            }
         });
 }
 
@@ -525,13 +549,16 @@ function listenForMessages() {
                 nodes.chatBody.appendChild(debugDiv);
             }
 
-            snapshot.docs.forEach(doc => {
+            snapshot.docs.forEach((doc, idx) => {
+                const msgId = doc.id;
                 try {
                     const msg = doc.data();
-                    const msgId = doc.id;
+                    const msgType = msg.type || 'text';
+                    console.log(`[Msg ${idx + 1}/${snapshot.size}] ID: ${msgId}, Type: ${msgType}`);
 
                     // Skip if deleted for this user
                     if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
+                        console.log(`- Skipping ${msgId}: Marked as deleted for current user.`);
                         return;
                     }
 
@@ -679,11 +706,13 @@ function listenForMessages() {
                     <div class="msg-time">${timeStr}${tickHtml}</div>
                 `;
                     if (nodes.chatBody) nodes.chatBody.appendChild(div);
+                    console.log(`- Rendered ${msgId} successfully.`);
                 } catch (err) {
-                    console.error("Error rendering individual message:", doc.id, err);
+                    console.error(`- Error rendering ${doc.id}:`, err);
                 }
             });
             if (nodes.chatBody) nodes.chatBody.scrollTop = nodes.chatBody.scrollHeight;
+            console.log(`listenForMessages: Finished rendering ${snapshot.size} messages.`);
 
             // Auto-mark incoming as read while the chat is open
             if (activeChatId) {
@@ -701,9 +730,9 @@ function listenForMessages() {
 
 // 5. Send Message
 async function sendMessage() {
-    console.log("sendMessage: check state...", { activeChatId, hasInput: !!nodes.messageInput });
+    console.log("SENDING MESSAGE: Initializing...", { activeChatId, hasInput: !!nodes.messageInput });
     if (!activeChatId) {
-        console.warn("No active chat selected!");
+        alert("Pehle koi chat select karein!");
         return;
     }
 
@@ -721,7 +750,7 @@ async function sendMessage() {
 
     // Clear input immediately for responsiveness
     mInput.value = '';
-    updateSendBtnIcon();
+    if (typeof updateSendBtnIcon === 'function') updateSendBtnIcon();
 
     try {
         await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
