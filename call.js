@@ -41,30 +41,43 @@ let isSpeakerOn = true;
 // Initialize Media Channels
 async function setupLocalStream() {
     try {
+        console.log("Setting up local stream...");
         localStream = await navigator.mediaDevices.getUserMedia({
             video: false,
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
+            audio: { echoCancellation: true, noiseSuppression: true }
         });
         localAudio.srcObject = localStream;
 
-        remoteStream = new MediaStream();
-        remoteAudio.srcObject = remoteStream;
+        // Reset PeerConnection listeners but NOT the object itself (initialized in endCallUI)
+        pc.oniceconnectionstatechange = () => {
+            console.log("ICE Connection State:", pc.iceConnectionState);
+            if (pc.iceConnectionState === 'connected') {
+                callStatus.innerText = "Connected";
+                callStatus.style.color = "#00a884";
+                remoteAudio.play().catch(e => console.warn("Remote audio play failed:", e));
+            }
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+                console.warn("ICE connection failed/disconnected.");
+            }
+        };
 
-        // Push tracks from local stream to peer connection
+        pc.ontrack = (event) => {
+            console.log("Remote track received:", event.track.kind);
+            if (event.streams && event.streams[0]) {
+                remoteAudio.srcObject = event.streams[0];
+            } else {
+                if (!remoteStream) remoteStream = new MediaStream();
+                remoteStream.addTrack(event.track);
+                remoteAudio.srcObject = remoteStream;
+            }
+            remoteAudio.play().catch(e => console.error("Auto-play failed:", e));
+        };
+
+        // Push tracks to peer connection
         localStream.getTracks().forEach((track) => {
             pc.addTrack(track, localStream);
         });
 
-        // Pull tracks from peer connection, add to remote video stream
-        pc.ontrack = (event) => {
-            event.streams[0].getTracks().forEach((track) => {
-                remoteStream.addTrack(track);
-            });
-        };
     } catch (err) {
         console.error("Error accessing microphone:", err);
         alert("Microphone access is required for voice calls.");
@@ -138,20 +151,14 @@ async function startCall(receiverId) {
         callDoc.onSnapshot((snapshot) => {
             const data = snapshot.data();
             if (!data) {
-                // Call deleted by receiver (Declined/Ended)
                 endCallUI();
                 return;
             }
 
-            if (data.status === 'connected') {
-                if (!callStartTime) callStartTime = Date.now();
-                callStatus.innerText = "Connected";
-                callStatus.style.color = "#00a884"; // Green for connected
-            }
-
-            if (!pc.currentRemoteDescription && data && data.answer) {
+            if (!pc.currentRemoteDescription && data.answer) {
+                console.log("Remote answer received, setting remote description...");
                 const answerDescription = new RTCSessionDescription(data.answer);
-                pc.setRemoteDescription(answerDescription);
+                pc.setRemoteDescription(answerDescription).catch(e => console.error("Error setting remote description:", e));
             }
         });
 
@@ -160,7 +167,7 @@ async function startCall(receiverId) {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
                     const candidate = new RTCIceCandidate(change.doc.data());
-                    pc.addIceCandidate(candidate);
+                    pc.addIceCandidate(candidate).catch(e => console.warn("Error adding answer candidate:", e));
                 }
             });
         });
@@ -299,7 +306,7 @@ async function answerCall(callId) {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
                     let data = change.doc.data();
-                    pc.addIceCandidate(new RTCIceCandidate(data));
+                    pc.addIceCandidate(new RTCIceCandidate(data)).catch(e => console.warn("Error adding offer candidate:", e));
                 }
             });
         });
@@ -355,7 +362,9 @@ function endCallUI() {
         remoteStream.getTracks().forEach(track => track.stop());
     }
 
-    pc.close();
+    if (pc) {
+        try { pc.close(); } catch (e) { console.error("Error closing peer connection:", e); }
+    }
 
     // Re-initialize PC for next calls
     pc = new RTCPeerConnection(servers);
@@ -365,6 +374,7 @@ function endCallUI() {
     callStartTime = null;
     otherParticipantId = null;
     window.amICaller = null;
+    window.amIReceiver = null;
 
     // Reset States
     isMuted = false;

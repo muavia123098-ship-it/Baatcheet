@@ -228,6 +228,30 @@ function listenForChats(authUid) {
             chats.sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
 
             console.log("Chats array updated and sorted:", chats);
+
+            // Sync activeChatData if the current active chat was updated
+            if (activeChatId) {
+                const currentChat = chats.find(c => c.id === activeChatId);
+                if (currentChat) {
+                    activeChatData = currentChat;
+                    // Update header UI (for block status etc.)
+                    const other = getOtherParticipant(currentChat);
+                    if (nodes.activeChatName) nodes.activeChatName.innerText = other.nickname || other.name;
+
+                    // Update menu UI block status
+                    const myUid = window.userData ? window.userData.uid : null;
+                    if (nodes.blockContactMenu) {
+                        if (currentChat.blockedBy && myUid && currentChat.blockedBy[myUid]) {
+                            nodes.blockContactMenu.innerText = "Unblock Contact";
+                            nodes.blockContactMenu.style.color = "var(--text-primary)";
+                        } else {
+                            nodes.blockContactMenu.innerText = "Block Contact";
+                            nodes.blockContactMenu.style.color = "var(--primary-red)";
+                        }
+                    }
+                }
+            }
+
             renderChatList();
         }, error => {
             console.error("Chat Listener Error:", error);
@@ -669,8 +693,17 @@ function listenForMessages() {
 
                     // Skip if deleted for this user
                     if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
-                        console.log(`- Skipping ${msgId}: Marked as deleted for current user.`);
                         return;
+                    }
+
+                    // Clear Chat Filter: Skip if message is older than the last "Clear Chat" time for this user
+                    if (activeChatData && activeChatData.clearedAt && userData && userData.uid) {
+                        const myClearTime = activeChatData.clearedAt[userData.uid];
+                        if (myClearTime && msg.timestamp) {
+                            const clearTs = myClearTime.toDate ? myClearTime.toDate().getTime() : myClearTime;
+                            const msgTs = msg.timestamp.toDate ? msg.timestamp.toDate().getTime() : (msg.timestamp.seconds * 1000);
+                            if (msgTs <= clearTs) return;
+                        }
                     }
 
                     const isSent = userData && msg.senderId === userData.uid;
@@ -1207,23 +1240,29 @@ async function clearChat() {
     if (!activeChatId) return;
     nodes.clearChatModal.classList.add('hidden');
 
+    const myUid = window.userData ? window.userData.uid : null;
+    if (!myUid) return;
+
     try {
-        const msgSnap = await window.db.collection('conversations')
-            .doc(activeChatId)
-            .collection('messages')
-            .get();
+        const convRef = window.db.collection('conversations').doc(activeChatId);
 
-        if (msgSnap.empty) return;
+        // Update the clearedAt timestamp for the current user in the conversation document
+        const updateData = {};
+        updateData[`clearedAt.${myUid}`] = firebase.firestore.FieldValue.serverTimestamp();
 
-        const batch = window.db.batch();
-        msgSnap.docs.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
+        await convRef.update(updateData);
 
-        console.log("Chat cleared successfully.");
-        // UI will update automatically via listener
+        console.log("Chat cleared for current user.");
+
+        // Update local state to trigger a re-render/filter immediately if possible
+        if (!activeChatData.clearedAt) activeChatData.clearedAt = {};
+        activeChatData.clearedAt[myUid] = Date.now(); // Temporary local timestamp
+
+        // Re-listen for messages to apply filter
+        listenForMessages();
     } catch (err) {
         console.error("Failed to clear chat:", err);
-        alert("Failed to clear chat. Please try again.");
+        alert("Chat clear nahi ho saka!");
     }
 }
 
