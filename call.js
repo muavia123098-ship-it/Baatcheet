@@ -76,6 +76,15 @@ async function setupLocalStream() {
 async function startCall(receiverId) {
     if (!window.userData || !receiverId) return;
 
+    // Block Check
+    if (window.activeChatData && window.activeChatData.blockedBy) {
+        const blockerIds = Object.keys(window.activeChatData.blockedBy);
+        if (blockerIds.length > 0) {
+            alert("This chat is blocked. You cannot make calls.");
+            return;
+        }
+    }
+
     // UI Update
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Calling...";
@@ -444,7 +453,8 @@ async function addCallLog(type, otherUserId, duration = null, callerId = null, r
             callerId: callerId || (window.amICaller ? window.userData.uid : otherUserId),
             receiverId: receiverId || (window.amICaller ? otherUserId : window.userData.uid),
             duration: duration,
-            read: true
+            read: true,
+            expiryAt: Date.now() + (60 * 60 * 1000) // Call logs expire 1 hour after creation
         });
 
         // Update last message in conversation

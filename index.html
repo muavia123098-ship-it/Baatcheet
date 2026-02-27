@@ -24,7 +24,10 @@
                         <span id="my-number-display" style="font-size: 12px; color: var(--text-secondary);"></span>
                     </div>
                 </div>
-                <div class="header-icons">
+                <div class="header-icons" style="gap: 15px;">
+                    <button id="install-app-btn" class="install-btn hidden">
+                        <i class="fas fa-download"></i> Install App
+                    </button>
                     <div class="menu-container">
                         <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
                         <div id="main-menu" class="dropdown-menu hidden">
@@ -74,9 +77,17 @@
                         <div id="active-chat-status" class="chat-status"></div>
                     </div>
                 </div>
-                <div class="header-icons">
+                <div class="header-icons" style="position: relative;">
                     <i class="fas fa-phone-alt" id="call-btn" title="Voice Call" style="display: none;"></i>
-                    <i class="fas fa-ellipsis-v"></i>
+                    <i class="fas fa-ellipsis-v" id="chat-menu-btn" title="Menu"></i>
+
+                    <!-- Chat Header Dropdown Menu -->
+                    <div id="chat-menu" class="dropdown-menu hidden" style="left: auto; right: 10px; top: 50px;">
+                        <div class="dropdown-item" id="contact-profile-menu">Profile</div>
+                        <div class="dropdown-item" id="clear-chat-menu">Clear Chat</div>
+                        <div class="dropdown-item" id="block-contact-menu" style="color: var(--primary-red);">Block
+                            Contact</div>
+                    </div>
                 </div>
             </header>
 
@@ -211,6 +222,35 @@
                 <button class="primary-btn" id="delete-for-me-btn" style="background: #333;">Delete for Me</button>
                 <button class="primary-btn" id="cancel-delete-btn"
                     style="background: transparent; border: 1px solid #333; color: #8696a0;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Chat Modal -->
+    <div id="clear-chat-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Clear this chat?</h2>
+            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">This will delete all messages in
+                this conversation for you.</p>
+            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
+                <button class="primary-btn" id="confirm-clear-chat-btn">Clear Chat</button>
+                <button class="primary-btn" id="cancel-clear-chat-btn"
+                    style="background: transparent; border: 1px solid #333;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Block Contact Modal -->
+    <div id="block-contact-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Block Contact?</h2>
+            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Blocked contacts will not be able
+                to call you or send you messages.</p>
+            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
+                <button class="primary-btn" id="confirm-block-btn"
+                    style="background: var(--primary-red);">Block</button>
+                <button class="primary-btn" id="cancel-block-btn"
+                    style="background: transparent; border: 1px solid #333;">Cancel</button>
             </div>
         </div>
     </div>

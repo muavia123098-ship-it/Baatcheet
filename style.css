@@ -1,3 +1,38 @@
+/* PWA Install Button */
+.install-btn {
+    background: linear-gradient(135deg, #00a884, #008f6f);
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 168, 132, 0.2);
+}
+
+.install-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0, 168, 132, 0.3);
+    filter: brightness(1.1);
+}
+
+.install-btn:active {
+    transform: translateY(0);
+}
+
+.install-btn i {
+    font-size: 12px;
+}
+
+.install-btn.hidden {
+    display: none;
+}
+
 :root {
     /* Color Palette - WhatsApp Style but Black & Red */
     --primary-red: #d32f2f;

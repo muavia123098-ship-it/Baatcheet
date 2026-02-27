@@ -3,6 +3,7 @@ let activeChatId = null;
 let activeChatData = null;
 let chats = [];
 let presenceListener = null;
+let typingListener = null;
 let messageListener = null;
 let typingTimeout = null;
 let isCurrentlyTyping = false;
@@ -38,7 +39,18 @@ function initDOMRefs() {
         deleteForMeBtn: document.getElementById('delete-for-me-btn'),
         cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
         emojiBtn: document.getElementById('emoji-btn'),
-        emojiPicker: document.getElementById('emoji-picker')
+        emojiPicker: document.getElementById('emoji-picker'),
+        chatMenuBtn: document.getElementById('chat-menu-btn'),
+        chatMenu: document.getElementById('chat-menu'),
+        clearChatMenu: document.getElementById('clear-chat-menu'),
+        blockContactMenu: document.getElementById('block-contact-menu'),
+        contactProfileMenu: document.getElementById('contact-profile-menu'),
+        clearChatModal: document.getElementById('clear-chat-modal'),
+        blockContactModal: document.getElementById('block-contact-modal'),
+        confirmClearChatBtn: document.getElementById('confirm-clear-chat-btn'),
+        cancelClearChatBtn: document.getElementById('cancel-clear-chat-btn'),
+        confirmBlockBtn: document.getElementById('confirm-block-btn'),
+        cancelBlockBtn: document.getElementById('cancel-block-btn')
     };
 
     // Attach local listeners with high priority
@@ -112,6 +124,42 @@ function initDOMRefs() {
     if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.onclick = confirmDeleteForEveryone;
 
     initEmojiPicker();
+
+    // Chat Menu Dropdown Logic
+    if (nodes.chatMenuBtn) {
+        nodes.chatMenuBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (nodes.chatMenu) nodes.chatMenu.classList.toggle('hidden');
+        };
+    }
+
+    // Modal Cancel Listeners
+    if (nodes.cancelClearChatBtn) nodes.cancelClearChatBtn.onclick = () => nodes.clearChatModal.classList.add('hidden');
+    if (nodes.cancelBlockBtn) nodes.cancelBlockBtn.onclick = () => nodes.blockContactModal.classList.add('hidden');
+
+    // Close menus on click outside
+    document.addEventListener('click', () => {
+        if (nodes.chatMenu) nodes.chatMenu.classList.add('hidden');
+        if (document.getElementById('main-menu')) document.getElementById('main-menu').classList.add('hidden');
+    });
+
+    // Chat Actions
+    if (nodes.clearChatMenu) nodes.clearChatMenu.onclick = () => {
+        nodes.clearChatModal.classList.remove('hidden');
+        nodes.chatMenu.classList.add('hidden');
+    };
+    if (nodes.blockContactMenu) nodes.blockContactMenu.onclick = () => {
+        nodes.blockContactModal.classList.remove('hidden');
+        nodes.chatMenu.classList.add('hidden');
+    };
+    if (nodes.contactProfileMenu) nodes.contactProfileMenu.onclick = () => {
+        openContactProfile();
+        nodes.chatMenu.classList.add('hidden');
+    };
+
+    if (nodes.confirmClearChatBtn) nodes.confirmClearChatBtn.onclick = clearChat;
+    if (nodes.confirmBlockBtn) nodes.confirmBlockBtn.onclick = confirmBlockContact;
+
 }
 
 function updateSendBtnIcon() {
@@ -144,6 +192,7 @@ window.auth.onAuthStateChanged(user => {
             updateHeaderUI();
             listenForChats(user.uid);
             listenForCalls();
+            managePresence(); // Start presence management
 
             // Midnight cleanup check
             checkAndRunDailyCleanup();
@@ -295,6 +344,20 @@ function selectChat(chat) {
     listenForMessages();
     // Mark incoming messages as read when chat is opened
     markMessagesAsRead(chat.id);
+    // Cleanup any already expired messages for this chat
+    cleanupExpiredMessages(chat.id);
+
+    // --- Block UI Update ---
+    const myUid = window.userData ? window.userData.uid : null;
+    if (nodes.blockContactMenu) {
+        if (chat.blockedBy && myUid && chat.blockedBy[myUid]) {
+            nodes.blockContactMenu.innerText = "Unblock Contact";
+            nodes.blockContactMenu.style.color = "var(--text-primary)";
+        } else {
+            nodes.blockContactMenu.innerText = "Block Contact";
+            nodes.blockContactMenu.style.color = "var(--primary-red)";
+        }
+    }
 }
 
 // Close Chat (Back to contacts or blank state)
@@ -318,6 +381,10 @@ function closeChat() {
         presenceListener();
         presenceListener = null;
     }
+    if (typingListener) {
+        typingListener();
+        typingListener = null;
+    }
 
     if (nodes.callBtn) nodes.callBtn.style.display = 'none';
 
@@ -335,47 +402,86 @@ function closeChat() {
 }
 
 // Helper functions for presence
+function managePresence() {
+    const userData = window.userData;
+    if (!userData || !userData.uid) return;
+
+    const userRef = window.db.collection('users').doc(userData.uid);
+
+    const updateStatus = (status) => {
+        userRef.update({
+            status: status,
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(err => console.warn("Presence update failed:", err));
+    };
+
+    // Set online on load
+    updateStatus('online');
+
+    // Heartbeat: Update 'lastSeen' every 1 minute to keep 'Online' active
+    const heartbeat = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            updateStatus('online');
+        }
+    }, 60000);
+
+    // Set offline on disconnect (tab close)
+    window.addEventListener('beforeunload', () => {
+        clearInterval(heartbeat);
+        // Note: update might not finish in beforeunload on some browsers
+        // so we also rely on visibilitychange and server-side timeouts if we had them.
+        updateStatus('offline');
+    });
+
+    // Handle visibility change (tab background/foreground)
+    document.addEventListener('visibilitychange', () => {
+        const isVisible = document.visibilityState === 'visible';
+        updateStatus(isVisible ? 'online' : 'offline');
+    });
+}
+
 function listenForOtherPresence(otherUid) {
     if (!nodes.activeChatStatus) return;
     if (presenceListener) presenceListener();
+    if (typingListener) typingListener();
+
+    let lastPresenceText = 'Offline';
 
     presenceListener = window.db.collection('users').doc(otherUid)
         .onSnapshot(doc => {
             const data = doc.data();
             if (data) {
                 if (data.status === 'online') {
-                    nodes.activeChatStatus.innerText = 'Online';
+                    lastPresenceText = 'Online';
                 } else if (data.lastSeen) {
                     const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
                     const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                    nodes.activeChatStatus.innerText = `Last seen at ${timeStr}`;
+                    lastPresenceText = `Last seen at ${timeStr}`;
                 } else {
-                    nodes.activeChatStatus.innerText = 'Offline';
+                    lastPresenceText = 'Offline';
+                }
+
+                // If not showing typing, update text
+                if (nodes.activeChatStatus.innerText !== 'Typing...') {
+                    nodes.activeChatStatus.innerText = lastPresenceText;
                 }
             }
         });
 
-    // Listen for typing status in the conversation document instead of user doc
-    // because typing is conversation-specific.
-    if (presenceListener) {
-        // We already have a listener for the user doc. 
-        // Let's add another one for the conversation to detect "Typing..."
-        window.db.collection('conversations').doc(activeChatId)
-            .onSnapshot(doc => {
-                const data = doc.data();
-                if (data && otherUid) {
-                    const isOtherTyping = data[`typing_${otherUid}`];
-                    if (isOtherTyping) {
-                        nodes.activeChatStatus.innerText = 'Typing...';
-                        nodes.activeChatStatus.style.color = '#43c966';
-                    } else {
-                        // Re-trigger standard status logic if not typing
-                        // (Usually the snapshot above will trigger, but we ensure consistency)
-                        nodes.activeChatStatus.style.color = 'var(--text-secondary)';
-                    }
+    typingListener = window.db.collection('conversations').doc(activeChatId)
+        .onSnapshot(doc => {
+            const data = doc.data();
+            if (data && otherUid) {
+                const isOtherTyping = data[`typing_${otherUid}`];
+                if (isOtherTyping) {
+                    nodes.activeChatStatus.innerText = 'Typing...';
+                    nodes.activeChatStatus.style.color = '#43c966';
+                } else {
+                    nodes.activeChatStatus.innerText = lastPresenceText;
+                    nodes.activeChatStatus.style.color = 'var(--text-secondary)';
                 }
-            });
-    }
+            }
+        });
 }
 
 function setTypingStatus(isTyping) {
@@ -399,10 +505,15 @@ async function markMessagesAsRead(chatId) {
 
         const batch = window.db.batch();
         let count = 0;
+        const expiryTime = Date.now() + (60 * 60 * 1000); // 1 hour from now
+
         unreadSnap.docs.forEach(doc => {
             const msg = doc.data();
             if (msg.senderId !== userData.uid) {
-                batch.update(doc.ref, { read: true });
+                batch.update(doc.ref, {
+                    read: true,
+                    expiryAt: expiryTime
+                });
                 count++;
             }
         });
@@ -730,11 +841,18 @@ function listenForMessages() {
 
 // 5. Send Message
 async function sendMessage() {
-    console.log("SENDING MESSAGE: Initializing...", { activeChatId, hasInput: !!nodes.messageInput });
-    if (!activeChatId) {
-        alert("Pehle koi chat select karein!");
-        return;
+    if (!activeChatId) return;
+
+    // Block Check
+    if (activeChatData && activeChatData.blockedBy) {
+        const blockerIds = Object.keys(activeChatData.blockedBy);
+        if (blockerIds.length > 0) {
+            alert("This chat is blocked. You cannot send messages.");
+            return;
+        }
     }
+
+    console.log("SENDING MESSAGE: Initializing...", { activeChatId, hasInput: !!nodes.messageInput });
 
     const mInput = nodes.messageInput || document.getElementById('message-input');
     if (!mInput) return;
@@ -997,6 +1115,73 @@ async function deleteAllChatsLocallyAndRemotely() {
     }
 }
 
+// --- Hourly Auto-Delete Logic ---
+async function cleanupExpiredMessages(chatId) {
+    if (!chatId) return;
+    const now = Date.now();
+    try {
+        const expiredSnap = await window.db.collection('conversations')
+            .doc(chatId)
+            .collection('messages')
+            .where('expiryAt', '<=', now)
+            .get();
+
+        if (!expiredSnap.empty) {
+            console.log(`Cleanup: Found ${expiredSnap.size} expired messages in chat ${chatId}. Deleting...`);
+            const batch = window.db.batch();
+            expiredSnap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
+    } catch (err) {
+        console.warn(`Cleanup failed for chat ${chatId}:`, err.message);
+    }
+}
+
+async function runGlobalCleanupSweep() {
+    if (!chats || chats.length === 0) return;
+    console.log("Running Global Expiry Sweep...");
+    for (const chat of chats) {
+        await cleanupExpiredMessages(chat.id);
+    }
+}
+
+// Start Expiry Sweep (every 5 minutes)
+setInterval(runGlobalCleanupSweep, 5 * 60 * 1000);
+
+// --- PWA Installation Logic ---
+let deferredPrompt;
+const installBtn = document.getElementById('install-app-btn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later.
+    deferredPrompt = e;
+    // Update UI notify the user they can install the PWA
+    if (installBtn) installBtn.classList.remove('hidden');
+    console.log("PWA: Install prompt stashed.");
+});
+
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        // Show the install prompt
+        deferredPrompt.prompt();
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`PWA: User response to the install prompt: ${outcome}`);
+        // We've used the prompt, and can't use it again, throw it away
+        deferredPrompt = null;
+        // Hide the install button
+        installBtn.classList.add('hidden');
+    });
+}
+
+window.addEventListener('appinstalled', (event) => {
+    console.log('PWA: App installed successfully.');
+    if (installBtn) installBtn.classList.add('hidden');
+});
+
 // Redundant listeners removed (handled in initDOMRefs)
 
 document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
@@ -1016,3 +1201,105 @@ if ('serviceWorker' in navigator) {
 // Redundant top-level listenForChats() call as it's handled in onAuthStateChanged
 
 // Redundant mainCallBtn attachment removed (handled in initDOMRefs)
+// --- Chat Header Menu Actions ---
+
+async function clearChat() {
+    if (!activeChatId) return;
+    nodes.clearChatModal.classList.add('hidden');
+
+    try {
+        const msgSnap = await window.db.collection('conversations')
+            .doc(activeChatId)
+            .collection('messages')
+            .get();
+
+        if (msgSnap.empty) return;
+
+        const batch = window.db.batch();
+        msgSnap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+
+        console.log("Chat cleared successfully.");
+        // UI will update automatically via listener
+    } catch (err) {
+        console.error("Failed to clear chat:", err);
+        alert("Failed to clear chat. Please try again.");
+    }
+}
+
+async function confirmBlockContact() {
+    if (!activeChatId || !window.userData) return;
+    nodes.blockContactModal.classList.add('hidden');
+
+    const myUid = window.userData.uid;
+    const convRef = window.db.collection('conversations').doc(activeChatId);
+
+    try {
+        const isBlocked = activeChatData.blockedBy && activeChatData.blockedBy[myUid];
+        const updateData = {};
+
+        if (isBlocked) {
+            updateData[`blockedBy.${myUid}`] = firebase.firestore.FieldValue.delete();
+            await convRef.update(updateData);
+            alert("Contact unblocked successfully.");
+        } else {
+            updateData[`blockedBy.${myUid}`] = true;
+            await convRef.update(updateData);
+            alert("Contact blocked successfully.");
+        }
+
+        // Update local state and UI
+        if (activeChatData.blockedBy) {
+            if (isBlocked) delete activeChatData.blockedBy[myUid];
+            else activeChatData.blockedBy[myUid] = true;
+        } else if (!isBlocked) {
+            activeChatData.blockedBy = { [myUid]: true };
+        }
+        selectChat(activeChatData);
+
+    } catch (err) {
+        console.error("Failed to toggle block status:", err);
+    }
+}
+
+function openContactProfile() {
+    if (!activeChatData) return;
+    const otherUser = getOtherParticipant(activeChatData);
+    if (!otherUser) return;
+
+    const pModal = document.getElementById('profile-modal');
+    const eProfileName = document.getElementById('edit-profile-name');
+    const sProfileBtn = document.getElementById('save-profile-btn');
+
+    if (pModal && eProfileName) {
+        eProfileName.value = otherUser.name || '';
+        pModal.classList.remove('hidden');
+
+        // Temporarily override save button for contact nickname
+        const originalSave = sProfileBtn.onclick;
+        sProfileBtn.onclick = async () => {
+            const newNickname = eProfileName.value.trim();
+            if (!newNickname) return;
+
+            try {
+                // Update nickname in current user's contacts
+                const contactSnap = await window.db.collection('users')
+                    .doc(window.userData.uid)
+                    .collection('contacts')
+                    .where('baatcheetNumber', '==', otherUser.baatcheetNumber)
+                    .get();
+
+                if (!contactSnap.empty) {
+                    await contactSnap.docs[0].ref.update({ name: newNickname });
+                }
+
+                pModal.classList.add('hidden');
+                alert("Nickname updated.");
+                sProfileBtn.onclick = originalSave; // Restore original
+                renderChatList(); // Refresh names
+            } catch (err) {
+                console.error("Failed to update nickname:", err);
+            }
+        };
+    }
+}
