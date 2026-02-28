@@ -77,7 +77,8 @@
                         <div id="active-chat-status" class="chat-status"></div>
                     </div>
                 </div>
-                <div class="header-icons" style="position: relative;">
+                <div class="header-icons" style="position: relative; gap: 15px;">
+                    <i class="fas fa-video" id="video-call-btn" title="Video Call" style="display: none;"></i>
                     <i class="fas fa-phone-alt" id="call-btn" title="Voice Call" style="display: none;"></i>
                     <i class="fas fa-ellipsis-v" id="chat-menu-btn" title="Menu"></i>
 
@@ -170,6 +171,38 @@
         </div>
     </div>
 
+    <!-- Centralized Permission Modal [NEW] -->
+    <div id="permission-modal" class="modal-overlay hidden">
+        <div class="modal" style="text-align: center; padding: 30px;">
+            <i class="fas fa-shield-alt" style="font-size: 50px; color: var(--primary-red); margin-bottom: 20px;"></i>
+            <h2 style="margin-bottom: 15px;">Permissions Zaroori Hain</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.6; font-size: 14px;">
+                Behtar experience ke liye humein <b>Microphone, Camera</b> aur <b>Notifications</b> ki ijazat chahiye.
+                Inke baghair calls aur alerts sahi se kaam nahi karain gay.
+            </p>
+            <div
+                style="text-align: left; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; margin-bottom: 25px;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
+                    <i class="fas fa-microphone" style="color: #00a884; width: 20px;"></i>
+                    <span style="font-size: 14px;">Microphone (Voice Calls)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
+                    <i class="fas fa-video" style="color: #00a884; width: 20px;"></i>
+                    <span style="font-size: 14px;">Camera (Video Calls)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <i class="fas fa-bell" style="color: #00a884; width: 20px;"></i>
+                    <span style="font-size: 14px;">Notifications (Alerts)</span>
+                </div>
+            </div>
+            <button class="primary-btn" id="grant-all-btn"
+                style="padding: 15px; font-size: 16px; margin-bottom: 15px;">Sari Permissions Dein (Allow)</button>
+            <p id="permission-skip"
+                style="color: #8696a0; font-size: 13px; cursor: pointer; text-decoration: underline;">Baad mein karoon
+                ga (Skip)</p>
+        </div>
+    </div>
+
     <!-- Incoming Call Modal -->
     <div id="incoming-call-modal" class="wa-call-screen hidden">
         <div class="wa-call-content">
@@ -189,7 +222,12 @@
 
     <!-- Active Call Modal -->
     <div id="active-call-modal" class="wa-call-screen hidden">
-        <div class="wa-call-header">
+        <div class="wa-video-call-container" id="video-container" style="display: none;">
+            <video id="remote-video" autoplay playsinline></video>
+            <video id="local-video" autoplay playsinline muted></video>
+        </div>
+
+        <div class="wa-call-header" id="call-header-ui">
             <div class="wa-call-status" id="call-status">Ringing...</div>
             <div class="wa-caller-name" id="active-call-name">Contact Name</div>
         </div>
@@ -203,6 +241,9 @@
         <div class="wa-call-actions">
             <button class="wa-action-btn wa-secondary-btn" id="mute-btn" title="Mute">
                 <i class="fas fa-microphone"></i>
+            </button>
+            <button class="wa-action-btn wa-secondary-btn id=" camera-btn" title="Camera" style="display: none;">
+                <i class="fas fa-video"></i>
             </button>
             <button class="wa-action-btn btn-end" id="end-call-btn" title="End Call">
                 <i class="fas fa-phone-slash"></i>

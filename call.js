@@ -17,13 +17,22 @@ let remoteStream = null;
 let incomingCallListener = null;
 let callStartTime = null;
 let otherParticipantId = null;
+let currentCallId = null;
+let callName = "";
+let isVideoCall = false;
+let isCameraOn = true;
 
 // Standardize globals
 const db = window.db;
 const auth = window.auth;
 const callBtn = document.getElementById('call-btn');
+const videoCallBtn = document.getElementById('video-call-btn');
+const cameraBtn = document.getElementById('camera-btn');
 const incomingCallModal = document.getElementById('incoming-call-modal');
 const activeCallModal = document.getElementById('active-call-modal');
+const videoContainer = document.getElementById('video-container');
+const callHeaderUI = document.getElementById('call-header-ui');
+
 const acceptCallBtn = document.getElementById('accept-call-btn');
 const declineCallBtn = document.getElementById('decline-call-btn');
 const endCallBtn = document.getElementById('end-call-btn');
@@ -31,24 +40,36 @@ const muteBtn = document.getElementById('mute-btn');
 const speakerBtn = document.getElementById('speaker-btn');
 const localAudio = document.getElementById('local-audio');
 const remoteAudio = document.getElementById('remote-audio');
+const localVideo = document.getElementById('local-video');
+const remoteVideo = document.getElementById('remote-video');
 const ringtoneAudio = document.getElementById('ringtone-audio');
 const callStatus = document.getElementById('call-status');
 
-// Call State
-let isMuted = false;
-let isSpeakerOn = true;
-
 // Initialize Media Channels
-async function setupLocalStream() {
+async function setupLocalStream(withVideo = false) {
     try {
-        console.log("Setting up local stream...");
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: false,
+        console.log(`Setting up local stream... requesting ${withVideo ? 'video & ' : ''}microphone access`);
+        const constraints = {
+            video: withVideo ? { facingMode: 'user' } : false,
             audio: { echoCancellation: true, noiseSuppression: true }
-        });
-        localAudio.srcObject = localStream;
+        };
 
-        // Reset PeerConnection listeners but NOT the object itself (initialized in endCallUI)
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Media access granted. Stream ID:", localStream.id);
+
+        if (withVideo) {
+            localVideo.srcObject = localStream;
+            videoContainer.style.display = 'block';
+            callHeaderUI.classList.add('wa-call-header-video');
+            cameraBtn.style.display = 'flex';
+        } else {
+            localAudio.srcObject = localStream;
+            videoContainer.style.display = 'none';
+            callHeaderUI.classList.remove('wa-call-header-video');
+            cameraBtn.style.display = 'none';
+        }
+
+        // Reset PeerConnection listeners but NOT the object itself
         pc.oniceconnectionstatechange = () => {
             console.log("ICE Connection State:", pc.iceConnectionState);
             if (pc.iceConnectionState === 'connected') {
@@ -56,21 +77,15 @@ async function setupLocalStream() {
                 callStatus.style.color = "#00a884";
                 remoteAudio.play().catch(e => console.warn("Remote audio play failed:", e));
             }
-            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-                console.warn("ICE connection failed/disconnected.");
-            }
         };
 
         pc.ontrack = (event) => {
             console.log("Remote track received:", event.track.kind);
-            if (event.streams && event.streams[0]) {
-                remoteAudio.srcObject = event.streams[0];
+            if (event.track.kind === 'video') {
+                remoteVideo.srcObject = event.streams[0];
             } else {
-                if (!remoteStream) remoteStream = new MediaStream();
-                remoteStream.addTrack(event.track);
-                remoteAudio.srcObject = remoteStream;
+                remoteAudio.srcObject = event.streams[0];
             }
-            remoteAudio.play().catch(e => console.error("Auto-play failed:", e));
         };
 
         // Push tracks to peer connection
@@ -79,15 +94,15 @@ async function setupLocalStream() {
         });
 
     } catch (err) {
-        console.error("Error accessing microphone:", err);
-        alert("Microphone access is required for voice calls.");
+        console.error("Error accessing media:", err);
         throw err;
     }
 }
 
 // 1. Create a Call (Caller)
-async function startCall(receiverId) {
+async function startCall(receiverId, withVideo = false) {
     if (!window.userData || !receiverId) return;
+    isVideoCall = withVideo;
 
     // Block Check
     if (window.activeChatData && window.activeChatData.blockedBy) {
@@ -112,7 +127,8 @@ async function startCall(receiverId) {
     document.getElementById('active-call-name').innerText = callName;
 
     try {
-        await setupLocalStream();
+        console.log("Starting call to:", receiverId, "Video:", withVideo);
+        await setupLocalStream(withVideo);
 
         // Reference to Firestore collections
         const callDoc = db.collection('calls').doc();
@@ -121,14 +137,12 @@ async function startCall(receiverId) {
 
         currentCallId = callDoc.id;
         otherParticipantId = receiverId;
-        window.amICaller = true; // Track who started the call
+        window.amICaller = true;
 
-        // Get candidates for caller, save to db
         pc.onicecandidate = (event) => {
             event.candidate && offerCandidates.add(event.candidate.toJSON());
         };
 
-        // Create offer
         const offerDescription = await pc.createOffer();
         await pc.setLocalDescription(offerDescription);
 
@@ -137,13 +151,13 @@ async function startCall(receiverId) {
             type: offerDescription.type,
         };
 
-        // Save call request to Firestore
         await callDoc.set({
             offer,
             callerId: window.userData.uid,
             callerName: window.userData.name,
             receiverId: receiverId,
             status: "ringing",
+            isVideo: isVideoCall,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
@@ -156,7 +170,6 @@ async function startCall(receiverId) {
             }
 
             if (!pc.currentRemoteDescription && data.answer) {
-                console.log("Remote answer received, setting remote description...");
                 const answerDescription = new RTCSessionDescription(data.answer);
                 pc.setRemoteDescription(answerDescription).catch(e => console.error("Error setting remote description:", e));
             }
@@ -183,7 +196,7 @@ function listenForCalls() {
     if (!window.userData) return;
 
     if (incomingCallListener) {
-        incomingCallListener(); // Unsubscribe previous if any
+        incomingCallListener();
     }
 
     incomingCallListener = db.collection('calls')
@@ -195,51 +208,26 @@ function listenForCalls() {
                     const callData = change.doc.data();
                     currentCallId = change.doc.id;
                     otherParticipantId = callData.callerId;
+                    isVideoCall = callData.isVideo || false;
 
-                    // Play Ringtone
                     if (ringtoneAudio) {
                         ringtoneAudio.play().catch(e => console.log("Audio play failed:", e));
-
-                        // Set Media Session Metadata (Styles the Android notification)
-                        if ('mediaSession' in navigator) {
-                            navigator.mediaSession.metadata = new MediaMetadata({
-                                title: 'Incoming Call',
-                                artist: callData.callerName || 'Baatcheet',
-                                album: 'Baatcheet Messenger'
-                            });
-                        }
                     }
 
-                    // Show Notification
-                    if (typeof showCallNotification === 'function') {
-                        showCallNotification(callData.callerName || "Someone");
-                    }
-
-                    // Show incoming call UI
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
+                    document.querySelector('.wa-call-status').innerText = isVideoCall ? "Incoming Video Call" : "Incoming Voice Call";
                     incomingCallModal.classList.remove('hidden');
-                    window.amICaller = false; // I am the receiver
+                    window.amICaller = false;
 
-                    // Setup active mode UI for later
                     document.getElementById('active-call-name').innerText = callData.callerName;
                 }
 
                 if (change.type === 'removed') {
-                    // Caller cancelled before pickup
-                    if (!activeCallModal.classList.contains('hidden')) return; // Already answered
-
-                    // Stop Ringtone
+                    if (!activeCallModal.classList.contains('hidden')) return;
                     if (ringtoneAudio) {
                         ringtoneAudio.pause();
                         ringtoneAudio.currentTime = 0;
                     }
-
-                    // Log Missed Call (Only caller logs it as missed_outgoing, or receiver as missed_incoming)
-                    // Actually, let's have only one entry. If it's removed and not answered, it's missed.
-                    if (window.userData.uid === callData.receiverId) {
-                        addCallLog('missed', callData.callerId, null, callData.callerId, callData.receiverId);
-                    }
-
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
                 }
@@ -255,20 +243,19 @@ async function answerCall(callId) {
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Connecting...";
 
-    // Stop Ringtone if answering
     if (ringtoneAudio) {
         ringtoneAudio.pause();
         ringtoneAudio.currentTime = 0;
     }
 
     try {
-        await setupLocalStream();
+        console.log("Answering call, Call ID:", callId, "Video:", isVideoCall);
+        await setupLocalStream(isVideoCall);
 
         const callDoc = db.collection('calls').doc(callId);
         const answerCandidates = callDoc.collection('answerCandidates');
         const offerCandidates = callDoc.collection('offerCandidates');
 
-        // Capture ICE candidates from receiver
         pc.onicecandidate = (event) => {
             event.candidate && answerCandidates.add(event.candidate.toJSON());
         };
@@ -291,7 +278,6 @@ async function answerCall(callId) {
             sdp: answerDescription.sdp,
         };
 
-        // Update document with answer and status
         await callDoc.update({
             answer,
             status: "connected"
@@ -301,7 +287,6 @@ async function answerCall(callId) {
         callStatus.innerText = "Connected";
         callStatus.style.color = "#00a884";
 
-        // Listen for caller ICE candidates
         offerCandidates.onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
@@ -311,7 +296,6 @@ async function answerCall(callId) {
             });
         });
 
-        // Listen if caller drops
         callDoc.onSnapshot(snapshot => {
             if (!snapshot.exists) {
                 endCallUI();
@@ -327,7 +311,6 @@ async function answerCall(callId) {
 // 4. End Call Logic
 async function endCall() {
     if (currentCallId) {
-        // Delete firestore document to signal other peer
         try {
             await db.collection('calls').doc(currentCallId).delete();
         } catch (e) { console.error("Error deleting call doc", e); }
@@ -339,12 +322,10 @@ async function endCall() {
     }
 
     if (duration > 0 && otherParticipantId) {
-        // Log the duration. Only the caller will log the 'answered' call to avoid duplicates.
         if (window.amICaller) {
             addCallLog('answered', otherParticipantId, duration, window.userData.uid, otherParticipantId);
         }
     } else if (duration === 0 && otherParticipantId) {
-        // Cancelled by caller before answer
         if (window.amICaller) {
             addCallLog('missed', otherParticipantId, null, window.userData.uid, otherParticipantId);
         }
@@ -353,20 +334,15 @@ async function endCall() {
     endCallUI();
 }
 
-// Cleanup function
 function endCallUI() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
-    if (remoteStream) {
-        remoteStream.getTracks().forEach(track => track.stop());
-    }
 
     if (pc) {
-        try { pc.close(); } catch (e) { console.error("Error closing peer connection:", e); }
+        try { pc.close(); } catch (e) { }
     }
 
-    // Re-initialize PC for next calls
     pc = new RTCPeerConnection(servers);
     localStream = null;
     remoteStream = null;
@@ -374,102 +350,76 @@ function endCallUI() {
     callStartTime = null;
     otherParticipantId = null;
     window.amICaller = null;
-    window.amIReceiver = null;
+    isVideoCall = false;
 
-    // Reset States
     isMuted = false;
-    isSpeakerOn = true;
+    isCameraOn = true;
     if (muteBtn) {
         muteBtn.classList.remove('active');
         muteBtn.innerHTML = '<i class="fas fa-microphone"></i>';
     }
-    if (speakerBtn) {
-        speakerBtn.classList.remove('active');
+    if (cameraBtn) {
+        cameraBtn.classList.remove('active');
+        cameraBtn.style.display = 'none';
+        cameraBtn.innerHTML = '<i class="fas fa-video"></i>';
     }
 
-    if (ringtoneAudio) {
-        ringtoneAudio.pause();
-        ringtoneAudio.currentTime = 0;
-    }
+    if (videoContainer) videoContainer.style.display = 'none';
+    if (localVideo) localVideo.srcObject = null;
+    if (remoteVideo) remoteVideo.srcObject = null;
 
-    // Clear Media Session
-    if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = null;
-    }
-
-    // Reset UI
     activeCallModal.classList.add('hidden');
     incomingCallModal.classList.add('hidden');
     callStatus.innerText = "Calling...";
     callStatus.style.color = "var(--primary)";
-    localAudio.srcObject = null;
-    remoteAudio.srcObject = null;
 }
 
-// Mute / Speaker Toggle
+// Handlers
 if (muteBtn) {
     muteBtn.onclick = () => {
         if (!localStream) return;
         isMuted = !isMuted;
-        localStream.getAudioTracks().forEach(track => {
-            track.enabled = !isMuted;
-        });
+        localStream.getAudioTracks().forEach(track => track.enabled = !isMuted);
         muteBtn.classList.toggle('active', isMuted);
         muteBtn.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
     };
 }
 
-if (speakerBtn) {
-    speakerBtn.onclick = async () => {
-        const remoteAudio = document.getElementById('remote-audio');
-        if (!remoteAudio) return;
-
-        isSpeakerOn = !isSpeakerOn;
-        speakerBtn.classList.toggle('active', !isSpeakerOn); // Active highlight when speaker is "off" (earpiece mode)
-
-        // Attempt to switch output if setSinkId is supported (mostly desktop/chrome)
-        // On mobile browsers, this is mostly handled by system/hardware but we can try to toggle sinkId
-        if (remoteAudio.setSinkId) {
-            try {
-                // If isSpeakerOn is false, we try to find a non-speaker device if available
-                // But usually browsers don't give "earpiece" vs "speaker" as separate IDs in JS
-                // However, we reflect the UI state for the user.
-                console.log("Speaker toggled to:", isSpeakerOn);
-            } catch (err) {
-                console.error("setSinkId failed", err);
-            }
-        }
+if (cameraBtn) {
+    cameraBtn.onclick = () => {
+        if (!localStream) return;
+        isCameraOn = !isCameraOn;
+        localStream.getVideoTracks().forEach(track => track.enabled = isCameraOn);
+        cameraBtn.classList.toggle('active', !isCameraOn);
+        cameraBtn.innerHTML = isCameraOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
     };
 }
 
-// Event Listeners
 if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
-if (declineCallBtn) declineCallBtn.onclick = () => endCall();
-if (endCallBtn) endCallBtn.onclick = () => endCall();
-// Helper to add call record to chat
-// Helper to add call record to chat
+if (declineCallBtn) declineCallBtn.onclick = endCall;
+if (endCallBtn) endCallBtn.onclick = endCall;
+
 async function addCallLog(type, otherUserId, duration = null, callerId = null, receiverId = null) {
     if (!window.userData || !otherUserId) return;
     const convId = [window.userData.uid, otherUserId].sort().join('_');
 
-    // We store minimal info and IDs so app.js can render "Incoming" or "Outgoing" correctly for each user
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({
-            text: 'Voice Call',
+            text: isVideoCall ? 'Video Call' : 'Voice Call',
             senderId: window.userData.uid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type: 'call',
-            callStatus: type, // 'answered' or 'missed'
+            callStatus: type,
             callerId: callerId || (window.amICaller ? window.userData.uid : otherUserId),
             receiverId: receiverId || (window.amICaller ? otherUserId : window.userData.uid),
             duration: duration,
+            isVideo: isVideoCall,
             read: true,
-            expiryAt: Date.now() + (60 * 60 * 1000) // Call logs expire 1 hour after creation
+            expiryAt: Date.now() + (60 * 60 * 1000)
         });
 
-        // Update last message in conversation
         await db.collection('conversations').doc(convId).update({
-            lastMessage: '📞 Voice Call',
+            lastMessage: isVideoCall ? '📹 Video Call' : '📞 Voice Call',
             lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
             [`unread_${receiverId}`]: true
         });

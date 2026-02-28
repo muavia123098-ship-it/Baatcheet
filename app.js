@@ -98,7 +98,15 @@ function initDOMRefs() {
         nodes.callBtn.onclick = () => {
             if (activeChatData) {
                 const other = getOtherParticipant(activeChatData);
-                if (other && other.uid) startCall(other.uid);
+                if (other && other.uid) startCall(other.uid, false);
+            }
+        };
+    }
+    if (document.getElementById('video-call-btn')) {
+        document.getElementById('video-call-btn').onclick = () => {
+            if (activeChatData) {
+                const other = getOtherParticipant(activeChatData);
+                if (other && other.uid) startCall(other.uid, true);
             }
         };
     }
@@ -196,6 +204,8 @@ window.auth.onAuthStateChanged(user => {
 
             // Midnight cleanup check
             checkAndRunDailyCleanup();
+            // Check permissions after login
+            checkAllPermissions();
             // Check every hour just in case they keep the tab open overnight
             setInterval(checkAndRunDailyCleanup, 60 * 60 * 1000);
         }, 500);
@@ -348,6 +358,7 @@ function selectChat(chat) {
 
     // Show Chat UI components
     if (nodes.callBtn) nodes.callBtn.style.display = 'block';
+    if (document.getElementById('video-call-btn')) document.getElementById('video-call-btn').style.display = 'block';
 
     const chatFooter = document.querySelector('.chat-footer');
     if (chatFooter) chatFooter.style.display = 'flex';
@@ -411,6 +422,7 @@ function closeChat() {
     }
 
     if (nodes.callBtn) nodes.callBtn.style.display = 'none';
+    if (document.getElementById('video-call-btn')) document.getElementById('video-call-btn').style.display = 'none';
 
     const chatFooter = document.querySelector('.chat-footer');
     if (chatFooter) chatFooter.style.display = 'none';
@@ -1339,6 +1351,67 @@ function openContactProfile() {
             } catch (err) {
                 console.error("Failed to update nickname:", err);
             }
+        };
+    }
+}
+// --- Permission Management [NEW] ---
+async function checkAllPermissions() {
+    const skipPermissions = localStorage.getItem('baatcheet_skip_permissions');
+    if (skipPermissions === 'true') return;
+
+    const modal = document.getElementById('permission-modal');
+    const grantBtn = document.getElementById('grant-all-btn');
+    const skipBtn = document.getElementById('permission-skip');
+
+    // Check if permissions are already granted
+    let micGranted = false;
+    let camGranted = false;
+    let notifyGranted = Notification.permission === 'granted';
+
+    try {
+        const micStatus = await navigator.permissions.query({ name: 'microphone' });
+        const camStatus = await navigator.permissions.query({ name: 'camera' });
+        micGranted = micStatus.state === 'granted';
+        camGranted = camStatus.state === 'granted';
+    } catch (e) {
+        console.warn("Permission query not fully supported:", e);
+    }
+
+    // If any important permission is missing, show modal
+    if (!micGranted || !camGranted || !notifyGranted) {
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    if (grantBtn) {
+        grantBtn.onclick = async () => {
+            grantBtn.disabled = true;
+            grantBtn.innerText = "Processing...";
+
+            try {
+                // 1. Notifications
+                if (Notification.permission !== 'granted') {
+                    await Notification.requestPermission();
+                }
+
+                // 2. Mic & Camera (This triggers the browser prompt)
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                // Stop the stream immediately, we only wanted the permission
+                stream.getTracks().forEach(track => track.stop());
+
+                console.log("All permissions requested/granted.");
+                if (modal) modal.classList.add('hidden');
+            } catch (err) {
+                console.error("Permission request failed:", err);
+                alert("Please allow permissions from browser settings to use all features.");
+                if (modal) modal.classList.add('hidden');
+            }
+        };
+    }
+
+    if (skipBtn) {
+        skipBtn.onclick = () => {
+            localStorage.setItem('baatcheet_skip_permissions', 'true');
+            if (modal) modal.classList.add('hidden');
         };
     }
 }

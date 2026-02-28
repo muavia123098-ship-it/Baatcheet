@@ -15,7 +15,7 @@ async function addContactByNumber(number, customName) {
     }
 
     try {
-        console.log("Searching for user:", number);
+        console.log("Step 1: Searching for user in 'users' collection with number:", number);
         const usersRef = window.db.collection('users');
         const snapshot = await usersRef.where('baatcheetNumber', '==', number).get();
 
@@ -25,34 +25,54 @@ async function addContactByNumber(number, customName) {
         }
 
         const targetUser = snapshot.docs[0].data();
+        console.log("Step 2: Target user found:", targetUser.name, targetUser.uid);
 
         // Check if conversation already exists
         const convId = [userData.uid, targetUser.uid].sort().join('_');
+        console.log("Step 3: Checking conversation in 'conversations' collection, ID:", convId);
         const convRef = window.db.collection('conversations').doc(convId);
-        const convDoc = await convRef.get();
+
+        let convDoc;
+        try {
+            convDoc = await convRef.get();
+        } catch (readError) {
+            console.error("Permission error during conversation READ:", readError);
+            throw readError;
+        }
 
         if (!convDoc.exists) {
-            console.log("Creating new conversation...");
-            await convRef.set({
-                participants: [userData.uid, targetUser.uid],
-                participantsData: [
-                    { uid: userData.uid, name: userData.name, photoURL: userData.photoURL || '' },
-                    { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
-                ],
-                lastMessage: '',
-                lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
-            });
-        } else {
-            const data = convDoc.data();
-            if (!data.participants.includes(userData.uid)) {
-                console.log("Updating participants array...");
-                await convRef.update({
+            console.log("Step 4: Creating new conversation...");
+            try {
+                await convRef.set({
                     participants: [userData.uid, targetUser.uid],
                     participantsData: [
                         { uid: userData.uid, name: userData.name, photoURL: userData.photoURL || '' },
                         { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
-                    ]
+                    ],
+                    lastMessage: '',
+                    lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
                 });
+            } catch (createError) {
+                console.error("Permission error during conversation CREATE:", createError);
+                throw createError;
+            }
+        } else {
+            const data = convDoc.data();
+            console.log("Step 4: Conversation exists. Checking participants...");
+            if (!data.participants.includes(userData.uid)) {
+                console.log("Updating participants array...");
+                try {
+                    await convRef.update({
+                        participants: [userData.uid, targetUser.uid],
+                        participantsData: [
+                            { uid: userData.uid, name: userData.name, photoURL: userData.photoURL || '' },
+                            { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
+                        ]
+                    });
+                } catch (updateError) {
+                    console.error("Permission error during conversation UPDATE:", updateError);
+                    throw updateError;
+                }
             } else {
                 alert("Ye contact pehle se mojood hai!");
                 return;
