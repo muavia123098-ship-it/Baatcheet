@@ -9,6 +9,8 @@ let typingTimeout = null;
 let isCurrentlyTyping = false;
 let isSelectionMode = false;
 let selectedMessages = new Set();
+let contactsMap = new Map(); // Local cache for nicknames
+let contactsListener = null;
 
 // DOM Cache
 let nodes = {};
@@ -201,6 +203,7 @@ window.auth.onAuthStateChanged(user => {
         setTimeout(() => {
             updateHeaderUI();
             listenForChats(user.uid);
+            listenForContacts(user.uid); // Sync nicknames
             listenForCalls(user.uid);
             managePresence(); // Start presence management
 
@@ -273,6 +276,21 @@ function listenForChats(authUid) {
         });
 }
 
+function listenForContacts(uid) {
+    if (!uid) return;
+    if (contactsListener) contactsListener();
+    console.log("Listening for private contacts...");
+    contactsListener = window.db.collection('users').doc(uid).collection('contacts')
+        .onSnapshot(snapshot => {
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.uid) contactsMap.set(data.uid, data);
+            });
+            console.log("Contacts map synced:", contactsMap.size, "records.");
+            renderChatList(); // Re-render to apply nicknames
+        });
+}
+
 function renderChatList(filter = '') {
     if (!nodes.chatList) return;
     console.log("Rendering Chat List. Total chats:", chats.length, "Filter:", filter);
@@ -319,7 +337,7 @@ function renderChatList(filter = '') {
             <div class="chat-item-info" style="margin-left: 0;">
                 <div class="chat-item-top">
                     <div>
-                        <span class="chat-item-name">${other.nickname || other.name || 'Unknown'}</span>
+                        <span class="chat-item-name">${contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown'}</span>
                         ${hasUnread ? '<span class="unread-dot"></span>' : ''}
                     </div>
                     <span class="chat-item-time">${time}</span>
@@ -547,11 +565,27 @@ async function markMessagesAsRead(chatId) {
 
         unreadSnap.docs.forEach(doc => {
             const msg = doc.data();
+            // Important: We only mark as read messages sent by others
             if (msg.senderId !== userData.uid) {
                 batch.update(doc.ref, {
                     read: true,
                     expiryAt: expiryTime
                 });
+                count++;
+            }
+        });
+
+        // Also: Look for messages that ARE read but missing expiryAt (for some reason)
+        // This ensures old read messages also get a cleanup timer eventually
+        const readMissingExpiry = await window.db.collection('conversations').doc(chatId)
+            .collection('messages')
+            .where('read', '==', true)
+            .get();
+
+        readMissingExpiry.docs.forEach(doc => {
+            const msg = doc.data();
+            if (!msg.expiryAt) {
+                batch.update(doc.ref, { expiryAt: expiryTime });
                 count++;
             }
         });
@@ -605,23 +639,48 @@ async function requestNotificationPermission() {
 // These might be declared in contacts.js, so we use them directly or from window.
 (function () {
     const pModal = document.getElementById('profile-modal');
+    const pHeader = pModal ? pModal.querySelector('.modal-header h3') : null;
     const eProfileName = document.getElementById('edit-profile-name');
     const sProfileBtn = document.getElementById('save-profile-btn');
+    const cProfileClose = document.getElementById('close-profile-modal');
+
+    // Store context: 'self' or 'contact'
+    let profileContext = 'self';
+    let currentContact = null;
 
     window.openProfileModal = function () {
+        profileContext = 'self';
+        currentContact = null;
+        if (pHeader) pHeader.innerText = "Edit Profile";
         const uData = window.userData;
         if (!uData) return;
         if (eProfileName) eProfileName.value = uData.name || "";
         if (pModal) pModal.classList.remove('hidden');
     };
 
+    window.openContactProfileModal = function (contact) {
+        profileContext = 'contact';
+        currentContact = contact;
+        if (pHeader) pHeader.innerText = "Contact Profile";
+        if (eProfileName) eProfileName.value = contact.name || "";
+        if (pModal) pModal.classList.remove('hidden');
+    };
+
+    if (cProfileClose) {
+        cProfileClose.onclick = () => {
+            if (pModal) pModal.classList.add('hidden');
+            profileContext = 'self';
+            currentContact = null;
+        };
+    }
+
     window.saveProfile = async function () {
         const uData = window.userData;
-        if (!eProfileName || !sProfileBtn) return;
+        if (!eProfileName || !sProfileBtn || !uData) return;
         const newName = eProfileName.value.trim();
 
         if (!newName) {
-            alert("Pehle apna naam enter karein!");
+            alert("Pehle naam enter karein!");
             return;
         }
 
@@ -629,23 +688,46 @@ async function requestNotificationPermission() {
             sProfileBtn.innerText = "Saving...";
             sProfileBtn.disabled = true;
 
-            await db.collection('users').doc(uData.uid).update({
-                name: newName
-            });
+            if (profileContext === 'self') {
+                // Update OWN profile
+                await db.collection('users').doc(uData.uid).update({ name: newName });
+                uData.name = newName;
+                localStorage.setItem('baatcheet_user', JSON.stringify(uData));
+                const nameDisp = document.getElementById('my-name-display');
+                if (nameDisp) nameDisp.innerText = newName;
+                console.log("Personal profile updated.");
+            } else {
+                // Update CONTACT nickname
+                if (currentContact) {
+                    const contactSnap = await db.collection('users')
+                        .doc(uData.uid)
+                        .collection('contacts')
+                        .where('uid', '==', currentContact.uid)
+                        .get();
 
-            // Update local memory and UI
-            uData.name = newName;
-            localStorage.setItem('baatcheet_user', JSON.stringify(uData));
+                    if (!contactSnap.empty) {
+                        await contactSnap.docs[0].ref.update({ name: newName });
+                    } else {
+                        // Create new contact record if it doesn't exist
+                        await db.collection('users')
+                            .doc(uData.uid)
+                            .collection('contacts')
+                            .add({
+                                uid: currentContact.uid,
+                                name: newName,
+                                baatcheetNumber: currentContact.baatcheetNumber || ''
+                            });
+                    }
+                    console.log("Contact nickname saved/updated.");
+                    renderChatList();
+                }
+            }
 
-            // Update Sidebar Header UI
-            const nameDisp = document.getElementById('my-name-display');
-            if (nameDisp) nameDisp.innerText = newName;
-
-            alert("Profile updated successfully!");
+            alert("Saved successfully!");
             if (pModal) pModal.classList.add('hidden');
         } catch (error) {
-            console.error("Error updating profile:", error);
-            alert("Profile update failed: " + error.message);
+            console.error("Error saving profile:", error);
+            alert("Update fail: " + error.message);
         } finally {
             sProfileBtn.innerText = "Save Changes";
             sProfileBtn.disabled = false;
@@ -842,7 +924,7 @@ function listenForMessages() {
                     if (msg.timestamp) {
                         try {
                             const date = msg.timestamp.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp.seconds * 1000);
-                            timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } catch (e) { timeStr = '...'; }
                     }
 
@@ -1320,40 +1402,20 @@ function openContactProfile() {
     const otherUser = getOtherParticipant(activeChatData);
     if (!otherUser) return;
 
+    // Use the unified profile modal logic
     const pModal = document.getElementById('profile-modal');
     const eProfileName = document.getElementById('edit-profile-name');
-    const sProfileBtn = document.getElementById('save-profile-btn');
+    const pHeader = pModal ? pModal.querySelector('.modal-header h3') : null;
 
     if (pModal && eProfileName) {
-        eProfileName.value = otherUser.name || '';
-        pModal.classList.remove('hidden');
+        if (pHeader) pHeader.innerText = "Contact Profile";
 
-        // Temporarily override save button for contact nickname
-        const originalSave = sProfileBtn.onclick;
-        sProfileBtn.onclick = async () => {
-            const newNickname = eProfileName.value.trim();
-            if (!newNickname) return;
+        // Scope variables from profile editing closure
+        // (Wait, app.js logic needs access to 'profileContext' and 'currentContact')
+        // I will re-implement this inside the closure or make them global-ish.
 
-            try {
-                // Update nickname in current user's contacts
-                const contactSnap = await window.db.collection('users')
-                    .doc(window.userData.uid)
-                    .collection('contacts')
-                    .where('baatcheetNumber', '==', otherUser.baatcheetNumber)
-                    .get();
-
-                if (!contactSnap.empty) {
-                    await contactSnap.docs[0].ref.update({ name: newNickname });
-                }
-
-                pModal.classList.add('hidden');
-                alert("Nickname updated.");
-                sProfileBtn.onclick = originalSave; // Restore original
-                renderChatList(); // Refresh names
-            } catch (err) {
-                console.error("Failed to update nickname:", err);
-            }
-        };
+        // Actually, let's just use the existing closure-friendly vars
+        window.openContactProfileModal(otherUser);
     }
 }
 // --- Permission Management [NEW] ---

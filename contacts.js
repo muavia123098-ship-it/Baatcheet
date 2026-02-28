@@ -52,6 +52,13 @@ async function addContactByNumber(number, customName) {
                     lastMessage: '',
                     lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
                 });
+
+                // ALSO save to private contacts list
+                await window.db.collection('users').doc(userData.uid).collection('contacts').add({
+                    uid: targetUser.uid,
+                    name: customName,
+                    baatcheetNumber: number
+                });
             } catch (createError) {
                 console.error("Permission error during conversation CREATE:", createError);
                 throw createError;
@@ -69,6 +76,17 @@ async function addContactByNumber(number, customName) {
                             { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
                         ]
                     });
+
+                    // ALSO ensure private contact exists/updated
+                    const contactSnap = await window.db.collection('users').doc(userData.uid).collection('contacts')
+                        .where('uid', '==', targetUser.uid).get();
+                    if (contactSnap.empty) {
+                        await window.db.collection('users').doc(userData.uid).collection('contacts').add({
+                            uid: targetUser.uid,
+                            name: customName,
+                            baatcheetNumber: number
+                        });
+                    }
                 } catch (updateError) {
                     console.error("Permission error during conversation UPDATE:", updateError);
                     throw updateError;

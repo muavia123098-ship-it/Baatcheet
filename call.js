@@ -136,6 +136,7 @@ async function startCall(receiverId, withVideo = false) {
         const userDoc = await db.collection('users').doc(receiverId).get();
         const userData = userDoc.data();
 
+        // Change: Allow 'away' status for background support
         if (!userData || userData.status === 'offline') {
             console.warn("[startCall] Target is offline.");
             callStatus.innerText = "User is currently offline";
@@ -146,6 +147,16 @@ async function startCall(receiverId, withVideo = false) {
 
         console.log(`[startCall] Initiating to ${receiverId}...`);
         if (outgoingRingtoneAudio) outgoingRingtoneAudio.play().catch(e => console.warn("Outgoing ringtone fail:", e));
+
+        // 2. Ringing Timeout (45 seconds)
+        window.callRingingTimeout = setTimeout(() => {
+            if (callStatus.innerText === "Calling..." || callStatus.innerText === "Ringing...") {
+                console.warn("[startCall] Ringing timed out.");
+                callStatus.innerText = "User is not responding";
+                callStatus.style.color = "#ff3b30";
+                setTimeout(() => endCall(), 3000);
+            }
+        }, 45000);
 
         await setupLocalStream(withVideo);
 
@@ -185,6 +196,8 @@ async function startCall(receiverId, withVideo = false) {
 
             if (!pc.currentRemoteDescription && data.answer) {
                 console.log("[startCall] Received Answer.");
+                // Stop timeout when answered
+                if (window.callRingingTimeout) { clearTimeout(window.callRingingTimeout); window.callRingingTimeout = null; }
                 if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
                 pc.setRemoteDescription(new RTCSessionDescription(data.answer))
                     .catch(e => console.error("setRemoteDescription Fail:", e));
@@ -230,6 +243,11 @@ function listenForCalls(uid) {
 
                     console.log(`[IncomingCall]: From ${callData.callerName}.`);
                     if (ringtoneAudio) ringtoneAudio.play().catch(e => { });
+
+                    // Notify if tab is in background
+                    if (typeof showCallNotification === 'function') {
+                        showCallNotification(callData.callerName);
+                    }
 
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
                     document.querySelector('.wa-call-status').innerText = isVideoCall ? "Incoming Video Call" : "Incoming Voice Call";
@@ -345,6 +363,8 @@ async function endCall() {
 function endCallUI(reason = "Normal") {
     console.log(`[endCallUI] DISCONNECT REASON: ${reason}`);
 
+    if (window.callRingingTimeout) { clearTimeout(window.callRingingTimeout); window.callRingingTimeout = null; }
+
     clearCallListeners();
 
     if (localStream) {
@@ -423,8 +443,8 @@ async function addCallLog(type, otherUserId, duration = null) {
             receiverId: otherUserId,
             duration: duration,
             isVideo: isVideoCall,
-            read: true,
-            expiryAt: Date.now() + (60 * 60 * 1000)
+            read: false, // Changed: Start as unread so auto-delete countdown starts after seen
+            // expiryAt: Date.now() + (60 * 60 * 1000) // Removed: Countdown starts after seen
         });
     } catch (e) { console.error("CallLog Fail:", e); }
 }

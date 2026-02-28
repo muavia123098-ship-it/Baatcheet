@@ -132,7 +132,7 @@ function managePresence() {
     // Handle visibility change (tab background/foreground)
     document.addEventListener('visibilitychange', () => {
         const isVisible = document.visibilityState === 'visible';
-        const status = isVisible ? 'online' : 'offline';
+        const status = isVisible ? 'online' : 'away'; // Change: use 'away' instead of 'offline'
         userRef.update({
             status: status,
             lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
