@@ -121,23 +121,34 @@ function managePresence() {
         lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // Set offline on disconnect
+    // Set 'away' (NOT offline) when tab/browser closes
+    // This ensures calls can still reach the user if their net is on
     window.addEventListener('beforeunload', () => {
         userRef.update({
-            status: 'offline',
+            status: 'away',
             lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
         });
     });
 
-    // Handle visibility change (tab background/foreground)
+    // Handle tab visibility change
     document.addEventListener('visibilitychange', () => {
         const isVisible = document.visibilityState === 'visible';
-        const status = isVisible ? 'online' : 'away'; // Change: use 'away' instead of 'offline'
+        const status = isVisible ? 'online' : 'away';
         userRef.update({
             status: status,
             lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
         }).catch(err => console.warn("Presence update failed:", err));
     });
+
+    // Heartbeat: keep 'online' every 2 minutes while app is open
+    setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            userRef.update({
+                status: 'online',
+                lastSeen: window.firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(() => { });
+        }
+    }, 2 * 60 * 1000);
 }
 
 // Wait for auth state to manage presence

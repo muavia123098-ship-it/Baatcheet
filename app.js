@@ -822,39 +822,22 @@ function listenForMessages() {
                     div.dataset.id = msgId;
 
                     // --- Interaction Handlers ---
-                    const handleSelectionInput = (e) => {
-                        if (isSelectionMode) {
-                            e.preventDefault();
-                            toggleMessageSelection(msgId, div);
-                        }
-                    };
-
                     // Desktop Right-Click
                     div.oncontextmenu = (e) => {
                         e.preventDefault();
-                        if (!isSelectionMode) {
-                            enterSelectionMode(msgId, div);
-                        }
+                        showDirectDeleteModal(msgId, isSent);
                     };
 
                     // Mobile Long-Press
                     div.ontouchstart = (e) => {
-                        if (isSelectionMode) return;
                         longPressTimeout = setTimeout(() => {
-                            enterSelectionMode(msgId, div);
+                            showDirectDeleteModal(msgId, isSent);
                         }, 600);
                     };
 
                     div.ontouchend = () => clearTimeout(longPressTimeout);
                     div.ontouchmove = () => clearTimeout(longPressTimeout);
-
-                    // Regular Click - Handled by delegation now, but we keep this to prevent default if needed
-                    div.onclick = (e) => {
-                        if (isSelectionMode) {
-                            e.stopPropagation(); // Prevent duplicate trigger from delegation if handled here
-                            // toggleMessageSelection(msgId, div); // Let delegation handle it
-                        }
-                    };
+                    div.onclick = null;
 
                     // Special rendering for Call Logs
                     if (msg.type === 'call') {
@@ -1083,6 +1066,28 @@ function formatDuration(seconds) {
 
 // --- Message Selection & Deletion Functions ---
 // Elements are now in nodes cache
+
+// Direct delete modal (no red screen — shows modal immediately on long press)
+function showDirectDeleteModal(msgId, isMine) {
+    // Clear previous selection and set this one message
+    selectedMessages.clear();
+    selectedMessages.add(msgId);
+
+    if (nodes.deleteModalText) {
+        nodes.deleteModalText.innerText = "Delete this message?";
+    }
+
+    // Show "Delete for Everyone" only for own messages
+    if (nodes.deleteForEveryoneBtn) {
+        if (isMine) {
+            nodes.deleteForEveryoneBtn.classList.remove('hidden');
+        } else {
+            nodes.deleteForEveryoneBtn.classList.add('hidden');
+        }
+    }
+
+    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.remove('hidden');
+}
 
 function enterSelectionMode(msgId, element) {
     isSelectionMode = true;
@@ -1517,6 +1522,8 @@ async function checkAllPermissions() {
                 stream.getTracks().forEach(track => track.stop());
 
                 console.log("All permissions requested/granted.");
+                // Also register FCM push token for background notifications
+                if (window.registerFCMToken) await window.registerFCMToken();
                 if (modal) modal.classList.add('hidden');
             } catch (err) {
                 console.error("Permission request failed:", err);

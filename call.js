@@ -134,11 +134,20 @@ async function startCall(receiverId, withVideo = false) {
         console.log(`[startCall] Checking receiver status: ${receiverId}`);
         // 1. Check Offline Status (Presence)
         const userDoc = await db.collection('users').doc(receiverId).get();
-        const userData = userDoc.data();
 
-        // Change: Allow 'away' status for background support
-        if (!userData || userData.status === 'offline') {
-            console.warn("[startCall] Target is offline.");
+        if (!userDoc.exists) {
+            console.warn("[startCall] Target user not found.");
+            callStatus.innerText = "User not found";
+            callStatus.style.color = "#ff3b30";
+            setTimeout(() => endCallUI("User Not Found"), 3000);
+            return;
+        }
+
+        const receiverData = userDoc.data();
+        // Only block if EXPLICITLY set to offline (e.g. no network heartbeat)
+        // 'away' means app is closed but internet is on — allow the call
+        if (receiverData.status === 'offline') {
+            console.warn("[startCall] Target is explicitly offline.");
             callStatus.innerText = "User is currently offline";
             callStatus.style.color = "#ff3b30";
             setTimeout(() => endCallUI("Receiver Offline"), 3000);
@@ -185,6 +194,8 @@ async function startCall(receiverId, withVideo = false) {
         });
 
         console.log("[startCall] CallDoc created:", currentCallId);
+        // NOTE: Full background push notifications require Firebase Cloud Functions (Blaze plan).
+        // For now, notifications work when the browser is open/minimized via the service worker listener.
 
         // Listen for remote updates
         currentCallListener = callDoc.onSnapshot((snapshot) => {
