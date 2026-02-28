@@ -1,6 +1,6 @@
 // call.js - WebRTC Voice & Video Calling Logic
 
-// WebRTC Configuration using Google STUN
+// WebRTC Configuration
 const servers = {
     iceServers: [
         {
@@ -15,8 +15,8 @@ let pc = new RTCPeerConnection(servers);
 let localStream = null;
 let remoteStream = null;
 let incomingCallListener = null;
-let currentCallListener = null; // Unsubscribe for call doc
-let candidateListener = null; // Unsubscribe for candidates
+let currentCallListener = null;
+let candidateListener = null;
 let callStartTime = null;
 let otherParticipantId = null;
 let currentCallId = null;
@@ -25,7 +25,7 @@ let isVideoCall = false;
 let isCameraOn = true;
 let isMuted = false;
 
-// Standardize globals
+// DOM Refs
 const db = window.db;
 const auth = window.auth;
 const callBtn = document.getElementById('call-btn');
@@ -40,28 +40,21 @@ const acceptCallBtn = document.getElementById('accept-call-btn');
 const declineCallBtn = document.getElementById('decline-call-btn');
 const endCallBtn = document.getElementById('end-call-btn');
 const muteBtn = document.getElementById('mute-btn');
-const speakerBtn = document.getElementById('speaker-btn');
 const localAudio = document.getElementById('local-audio');
 const remoteAudio = document.getElementById('remote-audio');
 const localVideo = document.getElementById('local-video');
 const remoteVideo = document.getElementById('remote-video');
 const ringtoneAudio = document.getElementById('ringtone-audio');
+const outgoingRingtoneAudio = document.getElementById('outgoing-ringtone-audio');
 const callStatus = document.getElementById('call-status');
 
-// Helper to unsubscribe listeners
+// Helper Actions
 function clearCallListeners() {
-    console.log("[clearCallListeners] Cleaning up observers...");
-    if (currentCallListener) {
-        currentCallListener();
-        currentCallListener = null;
-    }
-    if (candidateListener) {
-        candidateListener();
-        candidateListener = null;
-    }
+    console.log("[clearCallListeners] Cleaning Firestore observers...");
+    if (currentCallListener) { currentCallListener(); currentCallListener = null; }
+    if (candidateListener) { candidateListener(); candidateListener = null; }
 }
 
-// Initialize Media Channels
 async function setupLocalStream(withVideo = false) {
     try {
         console.log(`[setupLocalStream] Requesting ${withVideo ? 'Video+Audio' : 'Audio Only'}`);
@@ -70,13 +63,12 @@ async function setupLocalStream(withVideo = false) {
             audio: { echoCancellation: true, noiseSuppression: true }
         };
 
-        // If localStream already exists, stop it first to refresh or reuse
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
         }
 
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log("[setupLocalStream] Permission granted. Stream ID:", localStream.id);
+        console.log("[setupLocalStream] Success. Stream ID:", localStream.id);
 
         if (withVideo) {
             if (localVideo) localVideo.srcObject = localStream;
@@ -90,13 +82,16 @@ async function setupLocalStream(withVideo = false) {
             if (cameraBtn) cameraBtn.style.display = 'none';
         }
 
-        // Monitoring ICE
         pc.oniceconnectionstatechange = () => {
             console.log("[ICE State]:", pc.iceConnectionState);
             if (pc.iceConnectionState === 'connected') {
                 callStatus.innerText = "Connected";
                 callStatus.style.color = "#00a884";
-                if (remoteAudio) remoteAudio.play().catch(e => console.warn("Auto-play fail:", e));
+                if (remoteAudio) remoteAudio.play().catch(e => { });
+                if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
+            } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+                console.warn("[ICE State] Disconnected unexpectedly.");
+                endCallUI("Connection Failed");
             }
         };
 
@@ -109,31 +104,23 @@ async function setupLocalStream(withVideo = false) {
             }
         };
 
-        // Add Tracks
         localStream.getTracks().forEach((track) => {
             pc.addTrack(track, localStream);
         });
 
     } catch (err) {
-        console.error("[setupLocalStream] FATAL ERROR:", err);
+        console.error("[setupLocalStream] Error:", err);
         throw err;
     }
 }
 
 // 1. Create a Call (Caller)
 async function startCall(receiverId, withVideo = false) {
-    if (!window.userData || !receiverId) return;
-
-    // Safety: don't start if already in a call
-    if (currentCallId && !activeCallModal.classList.contains('hidden')) {
-        console.warn("Already in a call session.");
-        return;
-    }
+    if (!receiverId) return;
 
     isVideoCall = withVideo;
     clearCallListeners();
 
-    // UI Update
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Calling...";
 
@@ -144,7 +131,22 @@ async function startCall(receiverId, withVideo = false) {
     document.getElementById('active-call-name').innerText = callName;
 
     try {
-        console.log(`[startCall] Initiating... Target: ${receiverId}, Video: ${withVideo}`);
+        console.log(`[startCall] Checking receiver status: ${receiverId}`);
+        // 1. Check Offline Status (Presence)
+        const userDoc = await db.collection('users').doc(receiverId).get();
+        const userData = userDoc.data();
+
+        if (!userData || userData.status === 'offline') {
+            console.warn("[startCall] Target is offline.");
+            callStatus.innerText = "User is currently offline";
+            callStatus.style.color = "#ff3b30";
+            setTimeout(() => endCallUI("Receiver Offline"), 3000);
+            return;
+        }
+
+        console.log(`[startCall] Initiating to ${receiverId}...`);
+        if (outgoingRingtoneAudio) outgoingRingtoneAudio.play().catch(e => console.warn("Outgoing ringtone fail:", e));
+
         await setupLocalStream(withVideo);
 
         const callDoc = db.collection('calls').doc();
@@ -161,45 +163,45 @@ async function startCall(receiverId, withVideo = false) {
         const offerDescription = await pc.createOffer();
         await pc.setLocalDescription(offerDescription);
 
-        const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
-
         await callDoc.set({
-            offer,
-            callerId: window.userData.uid,
-            callerName: window.userData.name,
+            offer: { sdp: offerDescription.sdp, type: offerDescription.type },
+            callerId: (window.userData && window.userData.uid) || auth.currentUser.uid,
+            callerName: (window.userData && window.userData.name) || "User",
             receiverId: receiverId,
             status: "ringing",
             isVideo: isVideoCall,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        console.log(`[startCall] CallDoc ${currentCallId} created.`);
+        console.log("[startCall] CallDoc created:", currentCallId);
 
-        // Listen for remote answer
+        // Listen for remote updates
         currentCallListener = callDoc.onSnapshot((snapshot) => {
             const data = snapshot.data();
-            if (!data) {
-                endCallUI("Caller: Document deleted by remote/system");
+            if (!snapshot.exists || (data && data.status === 'ended')) {
+                endCallUI("Call ended by receiver");
                 return;
             }
 
             if (!pc.currentRemoteDescription && data.answer) {
-                console.log("[startCall] Received Answer. Setting Remote SDP...");
+                console.log("[startCall] Received Answer.");
+                if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
                 pc.setRemoteDescription(new RTCSessionDescription(data.answer))
-                    .catch(e => console.error("setRemoteDescription Error:", e));
+                    .catch(e => console.error("setRemoteDescription Fail:", e));
             }
+        }, (error) => {
+            console.error("[startCall] Snapshot Error:", error);
+            endCallUI(`Signaling Error: ${error.message}`);
         });
 
         // Listen for candidates
         candidateListener = callDoc.collection('answerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    console.log("[startCall] Adding answer candidate...");
-                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data()))
-                        .catch(e => console.warn("addIceCandidate Error:", e));
+                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(e => { });
                 }
             });
-        });
+        }, (err) => console.warn("AnswerCandidates Error:", err));
 
     } catch (err) {
         console.error("[startCall] FAILED:", err);
@@ -209,11 +211,8 @@ async function startCall(receiverId, withVideo = false) {
 
 // 2. Listen for Incoming Calls
 function listenForCalls(uid) {
-    const activeUid = uid || (window.userData ? window.userData.uid : null);
-    if (!activeUid) {
-        console.warn("[listenForCalls] No UID found, listener aborted.");
-        return;
-    }
+    const activeUid = uid || (window.userData ? window.userData.uid : (auth.currentUser ? auth.currentUser.uid : null));
+    if (!activeUid) return;
 
     if (incomingCallListener) incomingCallListener();
 
@@ -229,8 +228,8 @@ function listenForCalls(uid) {
                     otherParticipantId = callData.callerId;
                     isVideoCall = callData.isVideo || false;
 
-                    console.log(`[IncomingCall]: From ${callData.callerName}. Video: ${isVideoCall}`);
-                    if (ringtoneAudio) ringtoneAudio.play().catch(e => console.warn("Ringtone Fail:", e));
+                    console.log(`[IncomingCall]: From ${callData.callerName}.`);
+                    if (ringtoneAudio) ringtoneAudio.play().catch(e => { });
 
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
                     document.querySelector('.wa-call-status').innerText = isVideoCall ? "Incoming Video Call" : "Incoming Voice Call";
@@ -240,14 +239,15 @@ function listenForCalls(uid) {
                 }
 
                 if (change.type === 'removed') {
-                    if (!activeCallModal.classList.contains('hidden')) return;
-                    console.log("[IncomingCall] Removed from collection.");
+                    console.log("[IncomingCall] Signal removed.");
                     if (ringtoneAudio) { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; }
                     incomingCallModal.classList.add('hidden');
-                    currentCallId = null;
+                    if (activeCallModal.classList.contains('hidden')) {
+                        currentCallId = null;
+                    }
                 }
             });
-        });
+        }, (error) => console.error("[listenForCalls] Error:", error));
 }
 
 // 3. Answer Call (Receiver)
@@ -262,7 +262,7 @@ async function answerCall(callId) {
     if (ringtoneAudio) { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; }
 
     try {
-        console.log(`[answerCall] Connecting to ${callId}...`);
+        console.log(`[answerCall] Joining ${callId}...`);
         await setupLocalStream(isVideoCall);
 
         const callDoc = db.collection('calls').doc(callId);
@@ -274,8 +274,8 @@ async function answerCall(callId) {
         };
 
         const callData = (await callDoc.get()).data();
-        if (!callData) {
-            endCallUI("AnswerCall: Document vanished");
+        if (!callData || callData.status === 'ended') {
+            endCallUI("Call no longer available");
             return;
         }
 
@@ -291,22 +291,24 @@ async function answerCall(callId) {
         if (!callStartTime) callStartTime = Date.now();
         console.log("[answerCall] Connected.");
 
-        // Listen for caller candidates
+        // Monitor for end signal
+        currentCallListener = callDoc.onSnapshot(snapshot => {
+            const data = snapshot.data();
+            if (!snapshot.exists || (data && data.status === 'ended')) {
+                endCallUI("Call ended by caller");
+            }
+        }, (error) => {
+            console.error("[answerCall] Snapshot error:", error);
+            endCallUI("Signaling Error");
+        });
+
         candidateListener = callDoc.collection('offerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data()))
-                        .catch(e => console.warn("Offer Candidate Fail:", e));
+                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(e => { });
                 }
             });
-        });
-
-        // Listen if document is deleted
-        currentCallListener = callDoc.onSnapshot(snapshot => {
-            if (!snapshot.exists) {
-                endCallUI("Answer: Caller deleted document");
-            }
-        });
+        }, (err) => console.warn("OfferCandidates Error:", err));
 
     } catch (err) {
         console.error("[answerCall] FAILED:", err);
@@ -314,21 +316,29 @@ async function answerCall(callId) {
     }
 }
 
-// 4. End Call
+// 4. End Call Logic
 async function endCall() {
-    console.log("[endCall] Manual hangup triggered.");
-    if (currentCallId) {
-        try {
-            await db.collection('calls').doc(currentCallId).delete();
-        } catch (e) { console.error("Delete doc fail:", e); }
-    }
+    console.log("[endCall] User hangup.");
+    const idToKill = currentCallId;
 
-    let duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
-    if (otherParticipantId) {
-        if (window.amICaller) {
-            addCallLog(duration > 0 ? 'answered' : 'missed', otherParticipantId, duration, window.userData.uid, otherParticipantId);
+    if (idToKill) {
+        try {
+            // Send explicit end status
+            await db.collection('calls').doc(idToKill).update({ status: 'ended' }).catch(e => { });
+            // Small delay for signal delivery, then delete
+            setTimeout(async () => {
+                await db.collection('calls').doc(idToKill).delete().catch(e => { });
+            }, 2000);
+        } catch (e) {
+            await db.collection('calls').doc(idToKill).delete().catch(e => { });
         }
     }
+
+    const duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+    if (otherParticipantId && window.amICaller) {
+        addCallLog(duration > 0 ? 'answered' : 'missed', otherParticipantId, duration);
+    }
+
     endCallUI("Manual Hangup");
 }
 
@@ -339,7 +349,7 @@ function endCallUI(reason = "Normal") {
 
     if (localStream) {
         localStream.getTracks().forEach(track => {
-            console.log(` Stopping Local Track: ${track.kind}`);
+            console.log(` Stopping: ${track.kind}`);
             track.stop();
         });
     }
@@ -348,7 +358,7 @@ function endCallUI(reason = "Normal") {
         try { pc.close(); } catch (e) { }
     }
 
-    // Full Reset
+    // Reset PC properly
     pc = new RTCPeerConnection(servers);
     localStream = null;
     remoteStream = null;
@@ -358,19 +368,16 @@ function endCallUI(reason = "Normal") {
     window.amICaller = null;
     isVideoCall = false;
 
-    // Reset UI State
     isMuted = false;
     isCameraOn = true;
     if (muteBtn) { muteBtn.classList.remove('active'); muteBtn.innerHTML = '<i class="fas fa-microphone"></i>'; }
-    if (cameraBtn) {
-        cameraBtn.classList.remove('active');
-        cameraBtn.style.display = 'none';
-        cameraBtn.innerHTML = '<i class="fas fa-video"></i>';
-    }
+    if (cameraBtn) { cameraBtn.classList.remove('active'); cameraBtn.style.display = 'none'; cameraBtn.innerHTML = '<i class="fas fa-video"></i>'; }
 
     if (videoContainer) videoContainer.style.display = 'none';
     if (localVideo) localVideo.srcObject = null;
     if (remoteVideo) remoteVideo.srcObject = null;
+    if (ringtoneAudio) { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; }
+    if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
 
     activeCallModal.classList.add('hidden');
     incomingCallModal.classList.add('hidden');
@@ -378,7 +385,7 @@ function endCallUI(reason = "Normal") {
     callStatus.style.color = "var(--primary)";
 }
 
-// Global Handlers
+// Handlers
 if (muteBtn) {
     muteBtn.onclick = () => {
         if (!localStream) return;
@@ -397,32 +404,27 @@ if (cameraBtn) {
         cameraBtn.innerHTML = isCameraOn ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
     };
 }
-
 if (acceptCallBtn) acceptCallBtn.onclick = () => answerCall(currentCallId);
 if (declineCallBtn) declineCallBtn.onclick = endCall;
 if (endCallBtn) endCallBtn.onclick = endCall;
 
-async function addCallLog(type, otherUserId, duration = null, callerId = null, receiverId = null) {
-    if (!window.userData || !otherUserId) return;
-    const convId = [window.userData.uid, otherUserId].sort().join('_');
+async function addCallLog(type, otherUserId, duration = null) {
+    if (!otherUserId) return;
+    const myUid = (window.userData && window.userData.uid) || auth.currentUser.uid;
+    const convId = [myUid, otherUserId].sort().join('_');
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({
             text: isVideoCall ? 'Video Call' : 'Voice Call',
-            senderId: window.userData.uid,
+            senderId: myUid,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             type: 'call',
             callStatus: type,
-            callerId: callerId || (window.amICaller ? window.userData.uid : otherUserId),
-            receiverId: receiverId || (window.amICaller ? otherUserId : window.userData.uid),
+            callerId: myUid,
+            receiverId: otherUserId,
             duration: duration,
             isVideo: isVideoCall,
             read: true,
             expiryAt: Date.now() + (60 * 60 * 1000)
-        });
-        await db.collection('conversations').doc(convId).update({
-            lastMessage: isVideoCall ? '📹 Video Call' : '📞 Voice Call',
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
-            [`unread_${receiverId}`]: true
         });
     } catch (e) { console.error("CallLog Fail:", e); }
 }
