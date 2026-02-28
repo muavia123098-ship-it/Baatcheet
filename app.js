@@ -224,6 +224,14 @@ window.auth.onAuthStateChanged(user => {
             listenForCalls(user.uid);
             managePresence(); // Start presence management
 
+            // Link to OneSignal for background signaling
+            if (window.OneSignalDeferred) {
+                OneSignalDeferred.push(async function (OneSignal) {
+                    console.log("[OneSignal] Logging in External ID:", user.uid);
+                    await OneSignal.login(user.uid);
+                });
+            }
+
             // Midnight cleanup check
             checkAndRunDailyCleanup();
             // Check permissions after login
@@ -509,7 +517,7 @@ function managePresence() {
     // Handle visibility change (tab background/foreground)
     document.addEventListener('visibilitychange', () => {
         const isVisible = document.visibilityState === 'visible';
-        updateStatus(isVisible ? 'online' : 'offline');
+        updateStatus(isVisible ? 'online' : 'away');
     });
 }
 
@@ -526,6 +534,8 @@ function listenForOtherPresence(otherUid) {
             if (data) {
                 if (data.status === 'online') {
                     lastPresenceText = 'Online';
+                } else if (data.status === 'away') {
+                    lastPresenceText = 'Away';
                 } else if (data.lastSeen) {
                     const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
                     const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -537,6 +547,7 @@ function listenForOtherPresence(otherUid) {
                 // If not showing typing, update text
                 if (nodes.activeChatStatus.innerText !== 'Typing...') {
                     nodes.activeChatStatus.innerText = lastPresenceText;
+                    nodes.activeChatStatus.style.color = (data.status === 'online' || data.status === 'away') ? '#43c966' : 'var(--text-secondary)';
                 }
             }
         });

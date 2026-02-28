@@ -24,6 +24,8 @@ let callName = "";
 let isVideoCall = false;
 let isCameraOn = true;
 let isMuted = false;
+const ONESIGNAL_APP_ID = "97337ba2-f677-46f1-81c0-e22b1cc7987a";
+const ONESIGNAL_REST_KEY = "os_v2_app_s4zxxixwo5dpdaoa4ivrzr4ypii4qkx2xicep3fmpavc5omi2rmfqh7owulvyb6dgeocrj3uecysoinmi2b4clobez3w5fnrjj4d22a";
 
 // DOM Refs
 const db = window.db;
@@ -144,20 +146,19 @@ async function startCall(receiverId, withVideo = false) {
         }
 
         const receiverData = userDoc.data();
-        // Only block if EXPLICITLY set to offline (e.g. no network heartbeat)
-        // 'away' means app is closed but internet is on — allow the call
-        if (receiverData.status === 'offline') {
-            console.warn("[startCall] Target is explicitly offline.");
-            callStatus.innerText = "User is currently offline";
-            callStatus.style.color = "#ff3b30";
-            setTimeout(() => endCallUI("Receiver Offline"), 3000);
-            return;
-        }
 
-        console.log(`[startCall] Initiating to ${receiverId}...`);
+        // Removed strict offline check to allow background signaling
+        console.log(`[startCall] Initiating to ${receiverId} (Status: ${receiverData.status || 'unknown'})...`);
         if (outgoingRingtoneAudio) outgoingRingtoneAudio.play().catch(e => console.warn("Outgoing ringtone fail:", e));
 
-        // 2. Ringing Timeout (45 seconds)
+        // 2. Ringing Timeout & Status Updates
+        // First 15s: "Calling...", then "Ringing..."
+        setTimeout(() => {
+            if (currentCallId && callStatus.innerText === "Calling...") {
+                callStatus.innerText = "Ringing...";
+                db.collection('calls').doc(currentCallId).update({ status: 'ringing' }).catch(e => { });
+            }
+        }, 15000);
         window.callRingingTimeout = setTimeout(() => {
             if (callStatus.innerText === "Calling..." || callStatus.innerText === "Ringing...") {
                 console.warn("[startCall] Ringing timed out.");
@@ -194,8 +195,9 @@ async function startCall(receiverId, withVideo = false) {
         });
 
         console.log("[startCall] CallDoc created:", currentCallId);
-        // NOTE: Full background push notifications require Firebase Cloud Functions (Blaze plan).
-        // For now, notifications work when the browser is open/minimized via the service worker listener.
+
+        // 3. Send OneSignal Notification for background signaling
+        sendCallPush(receiverId, callData.callerName, isVideoCall);
 
         // Listen for remote updates
         currentCallListener = callDoc.onSnapshot((snapshot) => {
@@ -458,4 +460,34 @@ async function addCallLog(type, otherUserId, duration = null) {
             // expiryAt: Date.now() + (60 * 60 * 1000) // Removed: Countdown starts after seen
         });
     } catch (e) { console.error("CallLog Fail:", e); }
+}
+
+async function sendCallPush(receiverId, callerName, isVideo) {
+    try {
+        const userDoc = await db.collection('users').doc(receiverId).get();
+        if (!userDoc.exists) return;
+
+        // Note: Using REST API from client is only for PoC/Personal apps.
+        // For production, this should be done in Cloud Functions to hide the REST Key.
+        const response = await fetch("https://onesignal.com/api/v1/notifications", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": `Basic ${ONESIGNAL_REST_KEY}`
+            },
+            body: JSON.stringify({
+                app_id: ONESIGNAL_APP_ID,
+                include_external_user_ids: [receiverId],
+                contents: { "en": `${callerName} is calling you via Baatcheet...` },
+                headings: { "en": isVideo ? "Incoming Video Call" : "Incoming Voice Call" },
+                data: { type: "call", callId: currentCallId, callerName: callerName },
+                android_accent_color: "FF0000",
+                priority: 10
+            })
+        });
+        const resData = await response.json();
+        console.log("[OneSignal] Push sent:", resData);
+    } catch (err) {
+        console.error("[OneSignal] Push failed:", err);
+    }
 }
