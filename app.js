@@ -7,6 +7,8 @@ let typingListener = null;
 let messageListener = null;
 let typingTimeout = null;
 let isCurrentlyTyping = false;
+let isSelectionMode = false;
+let selectedMessages = new Set();
 
 // DOM Cache
 let nodes = {};
