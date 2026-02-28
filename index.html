@@ -88,6 +88,8 @@
                         <div class="dropdown-item" id="clear-chat-menu">Clear Chat</div>
                         <div class="dropdown-item" id="block-contact-menu" style="color: var(--primary-red);">Block
                             Contact</div>
+                        <div class="dropdown-item" id="delete-contact-menu" style="color: var(--primary-red);">Delete
+                            Contact</div>
                     </div>
                 </div>
             </header>
@@ -294,6 +296,21 @@
                 <button class="primary-btn" id="confirm-block-btn"
                     style="background: var(--primary-red);">Block</button>
                 <button class="primary-btn" id="cancel-block-btn"
+                    style="background: transparent; border: 1px solid #333;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Contact Modal (Two-way Deletion) -->
+    <div id="delete-contact-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2>Delete Contact?</h2>
+            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Ye contact aur chat history **dono
+                taron se** khatam ho jaye gi. Agle bande ki list se bhi gayab ho jaye ga.</p>
+            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
+                <button class="primary-btn" id="confirm-delete-contact-btn"
+                    style="background: var(--primary-red);">Delete for Both</button>
+                <button class="primary-btn" id="cancel-delete-contact-btn"
                     style="background: transparent; border: 1px solid #333;">Cancel</button>
             </div>
         </div>

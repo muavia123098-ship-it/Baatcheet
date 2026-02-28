@@ -54,7 +54,11 @@ function initDOMRefs() {
         confirmClearChatBtn: document.getElementById('confirm-clear-chat-btn'),
         cancelClearChatBtn: document.getElementById('cancel-clear-chat-btn'),
         confirmBlockBtn: document.getElementById('confirm-block-btn'),
-        cancelBlockBtn: document.getElementById('cancel-block-btn')
+        cancelBlockBtn: document.getElementById('cancel-block-btn'),
+        deleteContactMenu: document.getElementById('delete-contact-menu'),
+        deleteContactModal: document.getElementById('delete-contact-modal'),
+        confirmDeleteContactBtn: document.getElementById('confirm-delete-contact-btn'),
+        cancelDeleteContactBtn: document.getElementById('cancel-delete-contact-btn')
     };
 
     // Attach local listeners with high priority
@@ -171,6 +175,19 @@ function initDOMRefs() {
 
     if (nodes.confirmClearChatBtn) nodes.confirmClearChatBtn.onclick = clearChat;
     if (nodes.confirmBlockBtn) nodes.confirmBlockBtn.onclick = confirmBlockContact;
+
+    if (nodes.deleteContactMenu) {
+        nodes.deleteContactMenu.onclick = () => {
+            if (nodes.deleteContactModal) nodes.deleteContactModal.classList.remove('hidden');
+            if (nodes.chatMenu) nodes.chatMenu.classList.add('hidden');
+        };
+    }
+    if (nodes.cancelDeleteContactBtn) {
+        nodes.cancelDeleteContactBtn.onclick = () => {
+            if (nodes.deleteContactModal) nodes.deleteContactModal.classList.add('hidden');
+        };
+    }
+    if (nodes.confirmDeleteContactBtn) nodes.confirmDeleteContactBtn.onclick = confirmDeleteContact;
 
 }
 
@@ -596,6 +613,12 @@ async function markMessagesAsRead(chatId) {
 
         if (count > 0 || unreadSnap.size > 0) {
             await batch.commit();
+            // Schedule a one-time cleanup for exactly 1 hour from now
+            // so messages are deleted as soon as they expire
+            setTimeout(() => {
+                cleanupExpiredMessages(chatId);
+            }, 60 * 60 * 1000 + 5000); // 1 hour + 5 sec buffer
+            console.log(`markMessagesAsRead: ${count} messages marked. Auto-delete scheduled in 1 hour.`);
         }
     } catch (e) {
         console.warn('markMessagesAsRead error:', e.message);
@@ -699,25 +722,16 @@ async function requestNotificationPermission() {
             } else {
                 // Update CONTACT nickname
                 if (currentContact) {
-                    const contactSnap = await db.collection('users')
+                    const contactRef = db.collection('users')
                         .doc(uData.uid)
                         .collection('contacts')
-                        .where('uid', '==', currentContact.uid)
-                        .get();
+                        .doc(currentContact.uid);
 
-                    if (!contactSnap.empty) {
-                        await contactSnap.docs[0].ref.update({ name: newName });
-                    } else {
-                        // Create new contact record if it doesn't exist
-                        await db.collection('users')
-                            .doc(uData.uid)
-                            .collection('contacts')
-                            .add({
-                                uid: currentContact.uid,
-                                name: newName,
-                                baatcheetNumber: currentContact.baatcheetNumber || ''
-                            });
-                    }
+                    await contactRef.set({
+                        uid: currentContact.uid,
+                        name: newName,
+                        baatcheetNumber: currentContact.baatcheetNumber || ''
+                    }, { merge: true });
                     console.log("Contact nickname saved/updated.");
                     renderChatList();
                 }
@@ -1394,6 +1408,46 @@ async function confirmBlockContact() {
 
     } catch (err) {
         console.error("Failed to toggle block status:", err);
+    }
+}
+
+async function confirmDeleteContact() {
+    if (!activeChatId || !activeChatData) return;
+    const other = getOtherParticipant(activeChatData);
+    const myUid = window.userData ? window.userData.uid : null;
+
+    try {
+        if (nodes.confirmDeleteContactBtn) {
+            nodes.confirmDeleteContactBtn.innerText = "Deleting...";
+            nodes.confirmDeleteContactBtn.disabled = true;
+        }
+
+        // 1. Delete conversation document (Removes it for both participants)
+        await window.db.collection('conversations').doc(activeChatId).delete();
+        console.log("Conversation document deleted:", activeChatId);
+
+        // 2. Delete nickname from private contacts if it exists
+        if (myUid && other.uid) {
+            await window.db.collection('users').doc(myUid).collection('contacts').doc(other.uid).delete();
+            console.log("Private contact record deleted for UID:", other.uid);
+            contactsMap.delete(other.uid);
+        }
+
+        // 3. UI Cleanup
+        if (nodes.deleteContactModal) nodes.deleteContactModal.classList.add('hidden');
+        closeChat(); // Go back to empty state
+        renderChatList();
+
+        alert("Contact deleted successfully from both sides.");
+
+    } catch (err) {
+        console.error("Failed to delete contact:", err);
+        alert("Deletion failed: " + err.message);
+    } finally {
+        if (nodes.confirmDeleteContactBtn) {
+            nodes.confirmDeleteContactBtn.innerText = "Delete for Both";
+            nodes.confirmDeleteContactBtn.disabled = false;
+        }
     }
 }
 

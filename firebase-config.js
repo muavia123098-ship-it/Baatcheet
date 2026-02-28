@@ -13,6 +13,19 @@ window.firebase = firebase;
 firebase.initializeApp(firebaseConfig);
 window.auth = firebase.auth();
 window.db = firebase.firestore();
+// Disable offline persistence so deleted messages are NOT cached in browser
+window.db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
+try {
+    window.db.enablePersistence({ synchronizeTabs: true });
+    console.log("Firestore persistence enabled for multi-tab support.");
+} catch (err) {
+    if (err.code === 'failed-precondition') {
+        console.warn("Persistence disabled: Multiple tabs open. Falling back to memory cache.");
+        window.db.clearPersistence && window.db.clearPersistence();
+    } else if (err.code === 'unimplemented') {
+        console.warn("Persistence not supported in this browser.");
+    }
+}
 window.storage = firebase.storage();
 window.provider = new firebase.auth.GoogleAuthProvider();
 

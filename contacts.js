@@ -53,8 +53,8 @@ async function addContactByNumber(number, customName) {
                     lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // ALSO save to private contacts list
-                await window.db.collection('users').doc(userData.uid).collection('contacts').add({
+                // ALSO save to private contacts list (Use UID as Doc ID)
+                await window.db.collection('users').doc(userData.uid).collection('contacts').doc(targetUser.uid).set({
                     uid: targetUser.uid,
                     name: customName,
                     baatcheetNumber: number
@@ -78,15 +78,11 @@ async function addContactByNumber(number, customName) {
                     });
 
                     // ALSO ensure private contact exists/updated
-                    const contactSnap = await window.db.collection('users').doc(userData.uid).collection('contacts')
-                        .where('uid', '==', targetUser.uid).get();
-                    if (contactSnap.empty) {
-                        await window.db.collection('users').doc(userData.uid).collection('contacts').add({
-                            uid: targetUser.uid,
-                            name: customName,
-                            baatcheetNumber: number
-                        });
-                    }
+                    await window.db.collection('users').doc(userData.uid).collection('contacts').doc(targetUser.uid).set({
+                        uid: targetUser.uid,
+                        name: customName,
+                        baatcheetNumber: number
+                    }, { merge: true });
                 } catch (updateError) {
                     console.error("Permission error during conversation UPDATE:", updateError);
                     throw updateError;
