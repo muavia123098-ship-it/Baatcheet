@@ -155,5 +155,12 @@ function managePresence() {
 window.auth.onAuthStateChanged(user => {
     if (user) {
         managePresence();
+
+        // Link to OneSignal for targeted push notifications
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(function (OneSignal) {
+            console.log("[OneSignal] Logging in user:", user.uid);
+            OneSignal.login(user.uid);
+        });
     }
 });

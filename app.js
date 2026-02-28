@@ -12,6 +12,9 @@ let selectedMessages = new Set();
 let contactsMap = new Map(); // Local cache for nicknames
 let contactsListener = null;
 
+const ONESIGNAL_APP_ID = "97337ba2-f677-46f1-81c0-e22b1cc7987a";
+const ONESIGNAL_REST_KEY = "os_v2_app_s4zxxixwo5dpdaoa4ivrzr4ypii4qkx2xicep3fmpavc5omi2rmfqh7owulvyb6dgeocrj3uecysoinmi2b4clobez3w5fnrjj4d22a";
+
 // DOM Cache
 let nodes = {};
 
@@ -396,7 +399,7 @@ function selectChat(chat) {
     activeChatData = chat;
 
     const other = getOtherParticipant(chat);
-    if (nodes.activeChatName) nodes.activeChatName.innerText = other.nickname || other.name;
+    if (nodes.activeChatName) nodes.activeChatName.innerText = contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown';
 
     // Listen for other person's presence
     listenForOtherPresence(other.uid);
@@ -976,6 +979,30 @@ function listenForMessages() {
         });
 }
 
+// 4.5 Send Push Notification via OneSignal REST API
+async function sendMsgPush(receiverId, senderName, text) {
+    try {
+        console.log(`[sendMsgPush] Notifying ${receiverId}...`);
+        await fetch("https://onesignal.com/api/v1/notifications", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Authorization": `Basic ${ONESIGNAL_REST_KEY}`
+            },
+            body: JSON.stringify({
+                app_id: ONESIGNAL_APP_ID,
+                include_external_user_ids: [receiverId],
+                contents: { "en": text },
+                headings: { "en": senderName },
+                chrome_web_icon: "https://baatcheet-pi.vercel.app/logo.png",
+                data: { type: "message", senderId: (window.userData && window.userData.uid) || auth.currentUser.uid },
+                android_accent_color: "128C7E",
+                priority: 10
+            })
+        });
+    } catch (e) { console.error("[sendMsgPush] Fail:", e); }
+}
+
 // 5. Send Message
 async function sendMessage() {
     if (!activeChatId) return;
@@ -1026,6 +1053,11 @@ async function sendMessage() {
 
         await window.db.collection('conversations').doc(activeChatId).update(updateData);
         console.log("Message sent successfully!");
+
+        // Send Push if app is likely background/closed for receiver
+        if (other && other.uid) {
+            sendMsgPush(other.uid, uData.name || "Baatcheet User", text);
+        }
     } catch (e) {
         console.error("Error sending message:", e);
         alert("Pesh aaney wala masla (Sending failed): " + e.message);
@@ -1488,33 +1520,17 @@ function openContactProfile() {
         window.openContactProfileModal(otherUser);
     }
 }
-// --- Permission Management [NEW] ---
+// --- Permission Management ---
 async function checkAllPermissions() {
-    const skipPermissions = localStorage.getItem('baatcheet_skip_permissions');
-    if (skipPermissions === 'true') return;
+    // Already granted once before? Never show again.
+    const alreadyDone = localStorage.getItem('baatcheet_permissions_granted');
+    if (alreadyDone === 'true') return;
 
     const modal = document.getElementById('permission-modal');
     const grantBtn = document.getElementById('grant-all-btn');
-    const skipBtn = document.getElementById('permission-skip');
 
-    // Check if permissions are already granted
-    let micGranted = false;
-    let camGranted = false;
-    let notifyGranted = Notification.permission === 'granted';
-
-    try {
-        const micStatus = await navigator.permissions.query({ name: 'microphone' });
-        const camStatus = await navigator.permissions.query({ name: 'camera' });
-        micGranted = micStatus.state === 'granted';
-        camGranted = camStatus.state === 'granted';
-    } catch (e) {
-        console.warn("Permission query not fully supported:", e);
-    }
-
-    // If any important permission is missing, show modal
-    if (!micGranted || !camGranted || !notifyGranted) {
-        if (modal) modal.classList.remove('hidden');
-    }
+    // Show modal always on first open (user MUST allow)
+    if (modal) modal.classList.remove('hidden');
 
     if (grantBtn) {
         grantBtn.onclick = async () => {
@@ -1527,27 +1543,22 @@ async function checkAllPermissions() {
                     await Notification.requestPermission();
                 }
 
-                // 2. Mic & Camera (This triggers the browser prompt)
+                // 2. Mic & Camera
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-                // Stop the stream immediately, we only wanted the permission
                 stream.getTracks().forEach(track => track.stop());
 
-                console.log("All permissions requested/granted.");
-                // Also register FCM push token for background notifications
+                console.log("All permissions granted.");
+                // Mark as done — never show again
+                localStorage.setItem('baatcheet_permissions_granted', 'true');
+                // Also register FCM push token
                 if (window.registerFCMToken) await window.registerFCMToken();
                 if (modal) modal.classList.add('hidden');
             } catch (err) {
                 console.error("Permission request failed:", err);
-                alert("Please allow permissions from browser settings to use all features.");
-                if (modal) modal.classList.add('hidden');
+                grantBtn.disabled = false;
+                grantBtn.innerText = "Sari Permissions Dein (Allow)";
+                alert("Permissions Allow nahi hueen. Dobara koshish karein ya browser settings check karein.");
             }
-        };
-    }
-
-    if (skipBtn) {
-        skipBtn.onclick = () => {
-            localStorage.setItem('baatcheet_skip_permissions', 'true');
-            if (modal) modal.classList.add('hidden');
         };
     }
 }

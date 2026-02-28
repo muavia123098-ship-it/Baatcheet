@@ -21,9 +21,8 @@ let callStartTime = null;
 let otherParticipantId = null;
 let currentCallId = null;
 let callName = "";
-let isVideoCall = false;
-let isCameraOn = true;
 let isMuted = false;
+let remoteCandidatesBuffer = []; // Buffer for ICE candidates
 const ONESIGNAL_APP_ID = "97337ba2-f677-46f1-81c0-e22b1cc7987a";
 const ONESIGNAL_REST_KEY = "os_v2_app_s4zxxixwo5dpdaoa4ivrzr4ypii4qkx2xicep3fmpavc5omi2rmfqh7owulvyb6dgeocrj3uecysoinmi2b4clobez3w5fnrjj4d22a";
 
@@ -55,6 +54,43 @@ function clearCallListeners() {
     console.log("[clearCallListeners] Cleaning Firestore observers...");
     if (currentCallListener) { currentCallListener(); currentCallListener = null; }
     if (candidateListener) { candidateListener(); candidateListener = null; }
+    remoteCandidatesBuffer = []; // Clear buffer
+}
+
+function initPeerConnection() {
+    if (pc) {
+        try { pc.close(); } catch (e) { }
+    }
+    pc = new RTCPeerConnection(servers);
+    console.log("[initPeerConnection] New RTCPeerConnection instance created.");
+
+    pc.oniceconnectionstatechange = () => {
+        console.log("[ICE State]:", pc.iceConnectionState);
+        const statusEl = document.getElementById('call-status');
+        if (!statusEl) return;
+
+        if (pc.iceConnectionState === 'connected') {
+            statusEl.innerText = "Connected";
+            statusEl.style.color = "#00a884";
+            if (remoteAudio) remoteAudio.play().catch(e => { });
+            if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
+        } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+            console.warn("[ICE State] Disconnected unexpectedly.");
+            endCallUI("Connection Failed");
+        } else if (pc.iceConnectionState === 'checking') {
+            statusEl.innerText = "Connecting...";
+            statusEl.style.color = "var(--primary)";
+        }
+    };
+
+    pc.ontrack = (event) => {
+        console.log("[Track Received]:", event.track.kind);
+        if (event.track.kind === 'video') {
+            if (remoteVideo) remoteVideo.srcObject = event.streams[0];
+        } else {
+            if (remoteAudio) remoteAudio.srcObject = event.streams[0];
+        }
+    };
 }
 
 async function setupLocalStream(withVideo = false) {
@@ -84,28 +120,7 @@ async function setupLocalStream(withVideo = false) {
             if (cameraBtn) cameraBtn.style.display = 'none';
         }
 
-        pc.oniceconnectionstatechange = () => {
-            console.log("[ICE State]:", pc.iceConnectionState);
-            if (pc.iceConnectionState === 'connected') {
-                callStatus.innerText = "Connected";
-                callStatus.style.color = "#00a884";
-                if (remoteAudio) remoteAudio.play().catch(e => { });
-                if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
-            } else if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
-                console.warn("[ICE State] Disconnected unexpectedly.");
-                endCallUI("Connection Failed");
-            }
-        };
-
-        pc.ontrack = (event) => {
-            console.log("[Track Received]:", event.track.kind);
-            if (event.track.kind === 'video') {
-                if (remoteVideo) remoteVideo.srcObject = event.streams[0];
-            } else {
-                if (remoteAudio) remoteAudio.srcObject = event.streams[0];
-            }
-        };
-
+        // Add tracks to the CURRENT pc instance
         localStream.getTracks().forEach((track) => {
             pc.addTrack(track, localStream);
         });
@@ -122,6 +137,7 @@ async function startCall(receiverId, withVideo = false) {
 
     isVideoCall = withVideo;
     clearCallListeners();
+    initPeerConnection(); // Ensure CLEAN state
 
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Calling...";
@@ -184,10 +200,11 @@ async function startCall(receiverId, withVideo = false) {
         const offerDescription = await pc.createOffer();
         await pc.setLocalDescription(offerDescription);
 
+        const myName = (window.userData && window.userData.name) || "User";
         await callDoc.set({
             offer: { sdp: offerDescription.sdp, type: offerDescription.type },
             callerId: (window.userData && window.userData.uid) || auth.currentUser.uid,
-            callerName: (window.userData && window.userData.name) || "User",
+            callerName: myName,
             receiverId: receiverId,
             status: "ringing",
             isVideo: isVideoCall,
@@ -197,7 +214,7 @@ async function startCall(receiverId, withVideo = false) {
         console.log("[startCall] CallDoc created:", currentCallId);
 
         // 3. Send OneSignal Notification for background signaling
-        sendCallPush(receiverId, callData.callerName, isVideoCall);
+        sendCallPush(receiverId, myName, isVideoCall);
 
         // Listen for remote updates
         currentCallListener = callDoc.onSnapshot((snapshot) => {
@@ -208,12 +225,19 @@ async function startCall(receiverId, withVideo = false) {
             }
 
             if (!pc.currentRemoteDescription && data.answer) {
-                console.log("[startCall] Received Answer.");
+                console.log("[startCall] Received Answer. Setting Remote Description...");
                 // Stop timeout when answered
                 if (window.callRingingTimeout) { clearTimeout(window.callRingingTimeout); window.callRingingTimeout = null; }
                 if (outgoingRingtoneAudio) { outgoingRingtoneAudio.pause(); outgoingRingtoneAudio.currentTime = 0; }
-                pc.setRemoteDescription(new RTCSessionDescription(data.answer))
-                    .catch(e => console.error("setRemoteDescription Fail:", e));
+
+                const answerDesc = new RTCSessionDescription(data.answer);
+                pc.setRemoteDescription(answerDesc).then(() => {
+                    console.log("[startCall] Remote description set. Processing buffered candidates...");
+                    while (remoteCandidatesBuffer.length > 0) {
+                        const cand = remoteCandidatesBuffer.shift();
+                        pc.addIceCandidate(cand).catch(e => console.warn("Buffered ICE Error:", e));
+                    }
+                }).catch(e => console.error("setRemoteDescription Fail:", e));
             }
         }, (error) => {
             console.error("[startCall] Snapshot Error:", error);
@@ -224,7 +248,13 @@ async function startCall(receiverId, withVideo = false) {
         candidateListener = callDoc.collection('answerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(e => { });
+                    const candidate = new RTCIceCandidate(change.doc.data());
+                    if (pc.remoteDescription) {
+                        pc.addIceCandidate(candidate).catch(e => { });
+                    } else {
+                        console.log("[startCall] Buffering Answer Candidate...");
+                        remoteCandidatesBuffer.push(candidate);
+                    }
                 }
             });
         }, (err) => console.warn("AnswerCandidates Error:", err));
@@ -285,6 +315,7 @@ function listenForCalls(uid) {
 async function answerCall(callId) {
     if (!callId) return;
     clearCallListeners();
+    initPeerConnection(); // Ensure CLEAN state
 
     incomingCallModal.classList.add('hidden');
     activeCallModal.classList.remove('hidden');
@@ -311,6 +342,12 @@ async function answerCall(callId) {
         }
 
         await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+        console.log("[answerCall] Remote (Offer) set. Processing buffered candidates...");
+        while (remoteCandidatesBuffer.length > 0) {
+            const cand = remoteCandidatesBuffer.shift();
+            pc.addIceCandidate(cand).catch(e => { });
+        }
+
         const answerDescription = await pc.createAnswer();
         await pc.setLocalDescription(answerDescription);
 
@@ -336,7 +373,13 @@ async function answerCall(callId) {
         candidateListener = callDoc.collection('offerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(e => { });
+                    const candidate = new RTCIceCandidate(change.doc.data());
+                    if (pc.remoteDescription) {
+                        pc.addIceCandidate(candidate).catch(e => { });
+                    } else {
+                        console.log("[answerCall] Buffering Offer Candidate...");
+                        remoteCandidatesBuffer.push(candidate);
+                    }
                 }
             });
         }, (err) => console.warn("OfferCandidates Error:", err));
@@ -478,11 +521,17 @@ async function sendCallPush(receiverId, callerName, isVideo) {
             body: JSON.stringify({
                 app_id: ONESIGNAL_APP_ID,
                 include_external_user_ids: [receiverId],
-                contents: { "en": `${callerName} is calling you via Baatcheet...` },
-                headings: { "en": isVideo ? "Incoming Video Call" : "Incoming Voice Call" },
+                contents: { "en": `${callerName} represents Baatcheet: Aao baat karein!` },
+                headings: { "en": isVideo ? "Incoming Video Call 🎥" : "Incoming Voice Call 📞" },
                 data: { type: "call", callId: currentCallId, callerName: callerName },
+                chrome_web_icon: "https://baatcheet-pi.vercel.app/logo.png",
+                web_buttons: [
+                    { id: "accept", text: "✅ Accept", icon: "https://baatcheet-pi.vercel.app/logo.png" },
+                    { id: "decline", text: "❌ Decline", icon: "https://baatcheet-pi.vercel.app/logo.png" }
+                ],
                 android_accent_color: "FF0000",
-                priority: 10
+                priority: 10,
+                ttl: 60 // Call notification only valid for 60 seconds
             })
         });
         const resData = await response.json();
