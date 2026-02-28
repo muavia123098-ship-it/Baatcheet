@@ -1,4 +1,4 @@
-// call.js - WebRTC Voice Calling Logic
+// call.js - WebRTC Voice & Video Calling Logic
 
 // WebRTC Configuration using Google STUN
 const servers = {
@@ -15,12 +15,15 @@ let pc = new RTCPeerConnection(servers);
 let localStream = null;
 let remoteStream = null;
 let incomingCallListener = null;
+let currentCallListener = null; // Unsubscribe for call doc
+let candidateListener = null; // Unsubscribe for candidates
 let callStartTime = null;
 let otherParticipantId = null;
 let currentCallId = null;
 let callName = "";
 let isVideoCall = false;
 let isCameraOn = true;
+let isMuted = false;
 
 // Standardize globals
 const db = window.db;
@@ -45,56 +48,74 @@ const remoteVideo = document.getElementById('remote-video');
 const ringtoneAudio = document.getElementById('ringtone-audio');
 const callStatus = document.getElementById('call-status');
 
+// Helper to unsubscribe listeners
+function clearCallListeners() {
+    console.log("[clearCallListeners] Cleaning up observers...");
+    if (currentCallListener) {
+        currentCallListener();
+        currentCallListener = null;
+    }
+    if (candidateListener) {
+        candidateListener();
+        candidateListener = null;
+    }
+}
+
 // Initialize Media Channels
 async function setupLocalStream(withVideo = false) {
     try {
-        console.log(`Setting up local stream... requesting ${withVideo ? 'video & ' : ''}microphone access`);
+        console.log(`[setupLocalStream] Requesting ${withVideo ? 'Video+Audio' : 'Audio Only'}`);
         const constraints = {
             video: withVideo ? { facingMode: 'user' } : false,
             audio: { echoCancellation: true, noiseSuppression: true }
         };
 
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log("Media access granted. Stream ID:", localStream.id);
-
-        if (withVideo) {
-            localVideo.srcObject = localStream;
-            videoContainer.style.display = 'block';
-            callHeaderUI.classList.add('wa-call-header-video');
-            cameraBtn.style.display = 'flex';
-        } else {
-            localAudio.srcObject = localStream;
-            videoContainer.style.display = 'none';
-            callHeaderUI.classList.remove('wa-call-header-video');
-            cameraBtn.style.display = 'none';
+        // If localStream already exists, stop it first to refresh or reuse
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
         }
 
-        // Reset PeerConnection listeners but NOT the object itself
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("[setupLocalStream] Permission granted. Stream ID:", localStream.id);
+
+        if (withVideo) {
+            if (localVideo) localVideo.srcObject = localStream;
+            if (videoContainer) videoContainer.style.display = 'block';
+            if (callHeaderUI) callHeaderUI.classList.add('wa-call-header-video');
+            if (cameraBtn) cameraBtn.style.display = 'flex';
+        } else {
+            if (localAudio) localAudio.srcObject = localStream;
+            if (videoContainer) videoContainer.style.display = 'none';
+            if (callHeaderUI) callHeaderUI.classList.remove('wa-call-header-video');
+            if (cameraBtn) cameraBtn.style.display = 'none';
+        }
+
+        // Monitoring ICE
         pc.oniceconnectionstatechange = () => {
-            console.log("ICE Connection State:", pc.iceConnectionState);
+            console.log("[ICE State]:", pc.iceConnectionState);
             if (pc.iceConnectionState === 'connected') {
                 callStatus.innerText = "Connected";
                 callStatus.style.color = "#00a884";
-                remoteAudio.play().catch(e => console.warn("Remote audio play failed:", e));
+                if (remoteAudio) remoteAudio.play().catch(e => console.warn("Auto-play fail:", e));
             }
         };
 
         pc.ontrack = (event) => {
-            console.log("Remote track received:", event.track.kind);
+            console.log("[Track Received]:", event.track.kind);
             if (event.track.kind === 'video') {
-                remoteVideo.srcObject = event.streams[0];
+                if (remoteVideo) remoteVideo.srcObject = event.streams[0];
             } else {
-                remoteAudio.srcObject = event.streams[0];
+                if (remoteAudio) remoteAudio.srcObject = event.streams[0];
             }
         };
 
-        // Push tracks to peer connection
+        // Add Tracks
         localStream.getTracks().forEach((track) => {
             pc.addTrack(track, localStream);
         });
 
     } catch (err) {
-        console.error("Error accessing media:", err);
+        console.error("[setupLocalStream] FATAL ERROR:", err);
         throw err;
     }
 }
@@ -102,16 +123,15 @@ async function setupLocalStream(withVideo = false) {
 // 1. Create a Call (Caller)
 async function startCall(receiverId, withVideo = false) {
     if (!window.userData || !receiverId) return;
-    isVideoCall = withVideo;
 
-    // Block Check
-    if (window.activeChatData && window.activeChatData.blockedBy) {
-        const blockerIds = Object.keys(window.activeChatData.blockedBy);
-        if (blockerIds.length > 0) {
-            alert("This chat is blocked. You cannot make calls.");
-            return;
-        }
+    // Safety: don't start if already in a call
+    if (currentCallId && !activeCallModal.classList.contains('hidden')) {
+        console.warn("Already in a call session.");
+        return;
     }
+
+    isVideoCall = withVideo;
+    clearCallListeners();
 
     // UI Update
     activeCallModal.classList.remove('hidden');
@@ -119,37 +139,29 @@ async function startCall(receiverId, withVideo = false) {
 
     if (activeChatData) {
         const other = getOtherParticipant(activeChatData);
-        if (other) {
-            callName = other.nickname || other.name || "Contact";
-        }
+        if (other) callName = other.nickname || other.name || "Contact";
     }
-
     document.getElementById('active-call-name').innerText = callName;
 
     try {
-        console.log("Starting call to:", receiverId, "Video:", withVideo);
+        console.log(`[startCall] Initiating... Target: ${receiverId}, Video: ${withVideo}`);
         await setupLocalStream(withVideo);
 
-        // Reference to Firestore collections
         const callDoc = db.collection('calls').doc();
-        const offerCandidates = callDoc.collection('offerCandidates');
-        const answerCandidates = callDoc.collection('answerCandidates');
-
         currentCallId = callDoc.id;
         otherParticipantId = receiverId;
         window.amICaller = true;
 
         pc.onicecandidate = (event) => {
-            event.candidate && offerCandidates.add(event.candidate.toJSON());
+            if (event.candidate) {
+                callDoc.collection('offerCandidates').add(event.candidate.toJSON());
+            }
         };
 
         const offerDescription = await pc.createOffer();
         await pc.setLocalDescription(offerDescription);
 
-        const offer = {
-            sdp: offerDescription.sdp,
-            type: offerDescription.type,
-        };
+        const offer = { sdp: offerDescription.sdp, type: offerDescription.type };
 
         await callDoc.set({
             offer,
@@ -161,43 +173,44 @@ async function startCall(receiverId, withVideo = false) {
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
+        console.log(`[startCall] CallDoc ${currentCallId} created.`);
+
         // Listen for remote answer
-        callDoc.onSnapshot((snapshot) => {
+        currentCallListener = callDoc.onSnapshot((snapshot) => {
             const data = snapshot.data();
             if (!data) {
-                endCallUI();
+                endCallUI("Caller: Document deleted by remote/system");
                 return;
             }
 
             if (!pc.currentRemoteDescription && data.answer) {
-                const answerDescription = new RTCSessionDescription(data.answer);
-                pc.setRemoteDescription(answerDescription).catch(e => console.error("Error setting remote description:", e));
+                console.log("[startCall] Received Answer. Setting Remote SDP...");
+                pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+                    .catch(e => console.error("setRemoteDescription Error:", e));
             }
         });
 
-        // Listen for remote ICE candidates
-        answerCandidates.onSnapshot((snapshot) => {
+        // Listen for candidates
+        candidateListener = callDoc.collection('answerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    const candidate = new RTCIceCandidate(change.doc.data());
-                    pc.addIceCandidate(candidate).catch(e => console.warn("Error adding answer candidate:", e));
+                    console.log("[startCall] Adding answer candidate...");
+                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data()))
+                        .catch(e => console.warn("addIceCandidate Error:", e));
                 }
             });
         });
 
     } catch (err) {
-        console.error("Failed to start call", err);
-        endCallUI();
+        console.error("[startCall] FAILED:", err);
+        endCallUI(`StartCall Error: ${err.message}`);
     }
 }
 
 // 2. Listen for Incoming Calls
 function listenForCalls() {
     if (!window.userData) return;
-
-    if (incomingCallListener) {
-        incomingCallListener();
-    }
+    if (incomingCallListener) incomingCallListener();
 
     incomingCallListener = db.collection('calls')
         .where('receiverId', '==', window.userData.uid)
@@ -210,24 +223,20 @@ function listenForCalls() {
                     otherParticipantId = callData.callerId;
                     isVideoCall = callData.isVideo || false;
 
-                    if (ringtoneAudio) {
-                        ringtoneAudio.play().catch(e => console.log("Audio play failed:", e));
-                    }
+                    console.log(`[IncomingCall]: From ${callData.callerName}. Video: ${isVideoCall}`);
+                    if (ringtoneAudio) ringtoneAudio.play().catch(e => console.warn("Ringtone Fail:", e));
 
                     document.getElementById('incoming-caller-name').innerText = callData.callerName;
                     document.querySelector('.wa-call-status').innerText = isVideoCall ? "Incoming Video Call" : "Incoming Voice Call";
                     incomingCallModal.classList.remove('hidden');
                     window.amICaller = false;
-
                     document.getElementById('active-call-name').innerText = callData.callerName;
                 }
 
                 if (change.type === 'removed') {
                     if (!activeCallModal.classList.contains('hidden')) return;
-                    if (ringtoneAudio) {
-                        ringtoneAudio.pause();
-                        ringtoneAudio.currentTime = 0;
-                    }
+                    console.log("[IncomingCall] Removed from collection.");
+                    if (ringtoneAudio) { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; }
                     incomingCallModal.classList.add('hidden');
                     currentCallId = null;
                 }
@@ -238,111 +247,102 @@ function listenForCalls() {
 // 3. Answer Call (Receiver)
 async function answerCall(callId) {
     if (!callId) return;
+    clearCallListeners();
 
     incomingCallModal.classList.add('hidden');
     activeCallModal.classList.remove('hidden');
     callStatus.innerText = "Connecting...";
 
-    if (ringtoneAudio) {
-        ringtoneAudio.pause();
-        ringtoneAudio.currentTime = 0;
-    }
+    if (ringtoneAudio) { ringtoneAudio.pause(); ringtoneAudio.currentTime = 0; }
 
     try {
-        console.log("Answering call, Call ID:", callId, "Video:", isVideoCall);
+        console.log(`[answerCall] Connecting to ${callId}...`);
         await setupLocalStream(isVideoCall);
 
         const callDoc = db.collection('calls').doc(callId);
-        const answerCandidates = callDoc.collection('answerCandidates');
-        const offerCandidates = callDoc.collection('offerCandidates');
 
         pc.onicecandidate = (event) => {
-            event.candidate && answerCandidates.add(event.candidate.toJSON());
+            if (event.candidate) {
+                callDoc.collection('answerCandidates').add(event.candidate.toJSON());
+            }
         };
 
         const callData = (await callDoc.get()).data();
         if (!callData) {
-            alert("Call no longer exists.");
-            endCallUI();
+            endCallUI("AnswerCall: Document vanished");
             return;
         }
 
-        const offerDescription = callData.offer;
-        await pc.setRemoteDescription(new RTCSessionDescription(offerDescription));
-
+        await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
         const answerDescription = await pc.createAnswer();
         await pc.setLocalDescription(answerDescription);
 
-        const answer = {
-            type: answerDescription.type,
-            sdp: answerDescription.sdp,
-        };
-
         await callDoc.update({
-            answer,
+            answer: { sdp: answerDescription.sdp, type: answerDescription.type },
             status: "connected"
         });
 
         if (!callStartTime) callStartTime = Date.now();
-        callStatus.innerText = "Connected";
-        callStatus.style.color = "#00a884";
+        console.log("[answerCall] Connected.");
 
-        offerCandidates.onSnapshot((snapshot) => {
+        // Listen for caller candidates
+        candidateListener = callDoc.collection('offerCandidates').onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
-                    let data = change.doc.data();
-                    pc.addIceCandidate(new RTCIceCandidate(data)).catch(e => console.warn("Error adding offer candidate:", e));
+                    pc.addIceCandidate(new RTCIceCandidate(change.doc.data()))
+                        .catch(e => console.warn("Offer Candidate Fail:", e));
                 }
             });
         });
 
-        callDoc.onSnapshot(snapshot => {
+        // Listen if document is deleted
+        currentCallListener = callDoc.onSnapshot(snapshot => {
             if (!snapshot.exists) {
-                endCallUI();
+                endCallUI("Answer: Caller deleted document");
             }
         });
 
     } catch (err) {
-        console.error("Failed to answer call", err);
-        endCallUI();
+        console.error("[answerCall] FAILED:", err);
+        endCallUI(`AnswerCall Error: ${err.message}`);
     }
 }
 
-// 4. End Call Logic
+// 4. End Call
 async function endCall() {
+    console.log("[endCall] Manual hangup triggered.");
     if (currentCallId) {
         try {
             await db.collection('calls').doc(currentCallId).delete();
-        } catch (e) { console.error("Error deleting call doc", e); }
+        } catch (e) { console.error("Delete doc fail:", e); }
     }
 
-    let duration = 0;
-    if (callStartTime) {
-        duration = Math.floor((Date.now() - callStartTime) / 1000);
-    }
-
-    if (duration > 0 && otherParticipantId) {
+    let duration = callStartTime ? Math.floor((Date.now() - callStartTime) / 1000) : 0;
+    if (otherParticipantId) {
         if (window.amICaller) {
-            addCallLog('answered', otherParticipantId, duration, window.userData.uid, otherParticipantId);
-        }
-    } else if (duration === 0 && otherParticipantId) {
-        if (window.amICaller) {
-            addCallLog('missed', otherParticipantId, null, window.userData.uid, otherParticipantId);
+            addCallLog(duration > 0 ? 'answered' : 'missed', otherParticipantId, duration, window.userData.uid, otherParticipantId);
         }
     }
-
-    endCallUI();
+    endCallUI("Manual Hangup");
 }
 
-function endCallUI() {
+function endCallUI(reason = "Normal") {
+    console.log(`[endCallUI] DISCONNECT REASON: ${reason}`);
+
+    clearCallListeners();
+
     if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(track => {
+            console.log(` Stopping Local Track: ${track.kind}`);
+            track.stop();
+        });
     }
 
     if (pc) {
         try { pc.close(); } catch (e) { }
     }
 
+    // Full Reset
     pc = new RTCPeerConnection(servers);
     localStream = null;
     remoteStream = null;
@@ -352,12 +352,10 @@ function endCallUI() {
     window.amICaller = null;
     isVideoCall = false;
 
+    // Reset UI State
     isMuted = false;
     isCameraOn = true;
-    if (muteBtn) {
-        muteBtn.classList.remove('active');
-        muteBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-    }
+    if (muteBtn) { muteBtn.classList.remove('active'); muteBtn.innerHTML = '<i class="fas fa-microphone"></i>'; }
     if (cameraBtn) {
         cameraBtn.classList.remove('active');
         cameraBtn.style.display = 'none';
@@ -374,7 +372,7 @@ function endCallUI() {
     callStatus.style.color = "var(--primary)";
 }
 
-// Handlers
+// Global Handlers
 if (muteBtn) {
     muteBtn.onclick = () => {
         if (!localStream) return;
@@ -384,7 +382,6 @@ if (muteBtn) {
         muteBtn.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
     };
 }
-
 if (cameraBtn) {
     cameraBtn.onclick = () => {
         if (!localStream) return;
@@ -402,7 +399,6 @@ if (endCallBtn) endCallBtn.onclick = endCall;
 async function addCallLog(type, otherUserId, duration = null, callerId = null, receiverId = null) {
     if (!window.userData || !otherUserId) return;
     const convId = [window.userData.uid, otherUserId].sort().join('_');
-
     try {
         await db.collection('conversations').doc(convId).collection('messages').add({
             text: isVideoCall ? 'Video Call' : 'Voice Call',
@@ -417,13 +413,10 @@ async function addCallLog(type, otherUserId, duration = null, callerId = null, r
             read: true,
             expiryAt: Date.now() + (60 * 60 * 1000)
         });
-
         await db.collection('conversations').doc(convId).update({
             lastMessage: isVideoCall ? '📹 Video Call' : '📞 Voice Call',
             lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
             [`unread_${receiverId}`]: true
         });
-    } catch (e) {
-        console.error("Error adding call log:", e);
-    }
+    } catch (e) { console.error("CallLog Fail:", e); }
 }
