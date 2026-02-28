@@ -12,8 +12,6 @@ let selectedMessages = new Set();
 let contactsMap = new Map(); // Local cache for nicknames
 let contactsListener = null;
 
-const ONESIGNAL_APP_ID = "97337ba2-f677-46f1-81c0-e22b1cc7987a";
-const ONESIGNAL_REST_KEY = "os_v2_app_s4zxxixwo5dpdaoa4ivrzr4ypii4qkx2xicep3fmpavc5omi2rmfqh7owulvyb6dgeocrj3uecysoinmi2b4clobez3w5fnrjj4d22a";
 
 // DOM Cache
 let nodes = {};
@@ -279,7 +277,7 @@ function listenForChats(authUid) {
                     activeChatData = currentChat;
                     // Update header UI (for block status etc.)
                     const other = getOtherParticipant(currentChat);
-                    if (nodes.activeChatName) nodes.activeChatName.innerText = other.nickname || other.name;
+                    if (nodes.activeChatName) nodes.activeChatName.innerText = contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown';
 
                     // Update menu UI block status
                     const myUid = window.userData ? window.userData.uid : null;
