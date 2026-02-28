@@ -3,11 +3,18 @@ self.addEventListener('install', (e) => {
     self.skipWaiting();
 });
 
-self.addEventListener('fetch', (e) => {
-    // Network-first approach or just bypass for a realtime app
-    e.respondWith(
-        fetch(e.request).catch(() => {
-            console.log("Network error, could not fetch " + e.request.url);
+self.addEventListener('fetch', (event) => {
+    const url = new URL(event.request.url);
+    // Only handle same-origin requests — let external APIs (OneSignal, Firebase, etc.) pass through untouched
+    if (url.origin !== self.location.origin) {
+        return; // Let browser handle external requests normally
+    }
+
+    event.respondWith(
+        fetch(event.request).catch((err) => {
+            console.warn("[SW] Fetch failed for:", event.request.url, err);
+            // Return an empty response instead of letting respondWith fail
+            return new Response(null, { status: 404 });
         })
     );
 });
@@ -19,10 +26,15 @@ self.addEventListener('notificationclick', function (event) {
     if (event.action === 'accept') {
         event.waitUntil(
             clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-                if (clientList.length > 0) {
-                    return clientList[0].focus();
+                for (var i = 0; i < clientList.length; i++) {
+                    var client = clientList[i];
+                    if (client.url.includes('index.html') && 'focus' in client) {
+                        return client.focus();
+                    }
                 }
-                return clients.openWindow('./index.html');
+                if (clients.openWindow) {
+                    return clients.openWindow('./index.html');
+                }
             })
         );
     } else if (event.action === 'decline') {
@@ -38,10 +50,15 @@ self.addEventListener('notificationclick', function (event) {
         // Normal click on notification body: just focus
         event.waitUntil(
             clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-                if (clientList.length > 0) {
-                    return clientList[0].focus();
+                for (var i = 0; i < clientList.length; i++) {
+                    var client = clientList[i];
+                    if (client.url.includes('index.html') && 'focus' in client) {
+                        return client.focus();
+                    }
                 }
-                return clients.openWindow('./index.html');
+                if (clients.openWindow) {
+                    return clients.openWindow('./index.html');
+                }
             })
         );
     }
