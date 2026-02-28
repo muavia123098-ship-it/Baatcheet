@@ -201,7 +201,7 @@ window.auth.onAuthStateChanged(user => {
         setTimeout(() => {
             updateHeaderUI();
             listenForChats(user.uid);
-            listenForCalls();
+            listenForCalls(user.uid);
             managePresence(); // Start presence management
 
             // Midnight cleanup check

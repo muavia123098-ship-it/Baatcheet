@@ -767,6 +767,14 @@ body.selection-active .message {
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
 }
 
+.wa-call-header-video~.wa-call-actions {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+}
+
 .wa-video-call-container {
     position: absolute;
     top: 0;
@@ -827,6 +835,8 @@ body.selection-active .message {
     width: 100%;
     max-width: 320px;
     margin-bottom: 20px;
+    z-index: 25;
+    position: relative;
 }
 
 .wa-action-btn {

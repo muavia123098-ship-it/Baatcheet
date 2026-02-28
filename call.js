@@ -208,12 +208,18 @@ async function startCall(receiverId, withVideo = false) {
 }
 
 // 2. Listen for Incoming Calls
-function listenForCalls() {
-    if (!window.userData) return;
+function listenForCalls(uid) {
+    const activeUid = uid || (window.userData ? window.userData.uid : null);
+    if (!activeUid) {
+        console.warn("[listenForCalls] No UID found, listener aborted.");
+        return;
+    }
+
     if (incomingCallListener) incomingCallListener();
 
+    console.log("[listenForCalls] Starting listener for UID:", activeUid);
     incomingCallListener = db.collection('calls')
-        .where('receiverId', '==', window.userData.uid)
+        .where('receiverId', '==', activeUid)
         .where('status', '==', 'ringing')
         .onSnapshot((snapshot) => {
             snapshot.docChanges().forEach((change) => {
