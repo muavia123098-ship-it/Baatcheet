@@ -1,8 +1,16 @@
 // Logic to add contacts by Baatcheet Number with validation
 async function addContactByNumber(number, customName) {
-    const userData = window.userData;
+    // Ensure we have current user data
+    const userData = window.userData || JSON.parse(localStorage.getItem('baatcheet_user'));
+
+    if (!userData || !userData.uid) {
+        alert("Session expired! Please login again.");
+        window.location.href = 'login.html';
+        return;
+    }
+
     if (number === userData.baatcheetNumber) {
-        alert("You cannot add yourself!");
+        alert("Aap khud ko add nahi kar saktay!");
         return;
     }
 
@@ -12,7 +20,7 @@ async function addContactByNumber(number, customName) {
         const snapshot = await usersRef.where('baatcheetNumber', '==', number).get();
 
         if (snapshot.empty) {
-            alert("Ye number Baatcheet par exist nahi karta! (Number not found)");
+            alert("Ye number Baatcheet par mojood nahi hai!");
             return;
         }
 
@@ -24,38 +32,42 @@ async function addContactByNumber(number, customName) {
         const convDoc = await convRef.get();
 
         if (!convDoc.exists) {
+            console.log("Creating new conversation...");
             await convRef.set({
                 participants: [userData.uid, targetUser.uid],
                 participantsData: [
-                    { uid: userData.uid, name: userData.name },
-                    { uid: targetUser.uid, name: targetUser.name, nickname: customName }
+                    { uid: userData.uid, name: userData.name, photoURL: userData.photoURL || '' },
+                    { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
                 ],
                 lastMessage: '',
                 lastUpdate: window.firebase.firestore.FieldValue.serverTimestamp()
             });
         } else {
-            // Fix for previous bug: If conversation exists but participants are corrupted
             const data = convDoc.data();
             if (!data.participants.includes(userData.uid)) {
-                console.log("Fixing corrupted participants array...");
+                console.log("Updating participants array...");
                 await convRef.update({
                     participants: [userData.uid, targetUser.uid],
                     participantsData: [
-                        { uid: userData.uid, name: userData.name, photoURL: userData.photoURL },
-                        { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL, nickname: customName }
+                        { uid: userData.uid, name: userData.name, photoURL: userData.photoURL || '' },
+                        { uid: targetUser.uid, name: targetUser.name, photoURL: targetUser.photoURL || '', nickname: customName }
                     ]
                 });
             } else {
-                alert("Contact pehle se mojood he!");
+                alert("Ye contact pehle se mojood hai!");
                 return;
             }
         }
 
-        alert(`Contact ${customName} added successfully!`);
+        alert(`Contact '${customName}' kamyabi se add ho gaya!`);
         closeAddContactModal();
     } catch (error) {
         console.error("Error adding contact:", error);
-        alert("Failed to add contact: " + error.message);
+        if (error.message.includes("permission")) {
+            alert("Permission Error: Please ensure Firestore rules are updated in Firebase Console.");
+        } else {
+            alert("Failed to add contact: " + error.message);
+        }
     }
 }
 
