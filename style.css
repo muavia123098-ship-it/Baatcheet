@@ -151,11 +151,22 @@ body {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--glass-border);
-    display: flex;
+    display: none;
+    /* Hidden by default */
     justify-content: space-around;
     align-items: center;
     z-index: 1001;
     padding: 0 1rem;
+}
+
+#main-app.active~.bottom-nav,
+#main-app.active .bottom-nav {
+    display: flex;
+}
+
+/* Note: Since nav is outside #main-app, let's just control it via JS or a parent class */
+body.app-active .bottom-nav {
+    display: flex;
 }
 
 .nav-item {

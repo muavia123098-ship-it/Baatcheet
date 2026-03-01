@@ -33,7 +33,16 @@ onAuthStateChanged(auth, (user) => {
 function showScreen(screenId) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[screenId].classList.add('active');
+
+    // Show/Hide bottom nav based on screen
+    if (screenId === 'app' || screenId === 'main-app') {
+        document.body.classList.add('app-active');
+    } else {
+        document.body.classList.remove('app-active');
+    }
+
     if (window.lucide) lucide.createIcons();
+
     if (screenId === 'app' && !map) {
         setTimeout(initMap, 100);
         startLocationTracking();
