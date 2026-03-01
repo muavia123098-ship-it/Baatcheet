@@ -119,44 +119,93 @@
                         </div>
 
                         <div class="member-list" id="member-list">
-                            <!-- Members will be injected here -->
-                        </div>
-
-                        <div class="actions">
-                            <button id="share-location-btn" class="primary-btn">
-                                <i data-lucide="share-2"></i>
-                                Share Location
-                            </button>
+                            <!-- Connected Family members with 'Track' buttons -->
                         </div>
                     </div>
                 </div>
-            </main>
 
-            <nav class="bottom-nav glass-nav">
-                <button class="nav-item active" data-tab="map">
-                    <i data-lucide="map"></i>
-                    <span>Map</span>
-                </button>
-                <button class="nav-item" data-tab="family">
-                    <i data-lucide="users"></i>
-                    <span>Family</span>
-                </button>
-                <button class="nav-item" data-tab="settings">
-                    <i data-lucide="settings"></i>
-                    <span>Settings</span>
-                </button>
-            </nav>
+                <!-- Family Management Overlay (shown when 'Family' tab active) -->
+                <div id="family-overlay" class="overlay glass-modal hidden">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Family Members</h2>
+                            <button class="close-modal icon-btn"><i data-lucide="x"></i></button>
+                        </div>
+
+                        <div class="search-box">
+                            <input type="text" id="search-member-id"
+                                placeholder="Enter 6-digit Family ID (e.g. 123456)">
+                            <button id="search-btn" class="icon-btn"><i data-lucide="search"></i></button>
+                        </div>
+
+                        <div id="search-result" class="hidden">
+                            <div class="user-card glass-card">
+                                <div class="user-info">
+                                    <h4 id="found-user-name">...</h4>
+                                    <span id="found-user-id">#000000</span>
+                                </div>
+                                <button id="send-request-btn" class="icon-btn primary-bg"><i
+                                        data-lucide="user-plus"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="section-title">Pending Requests</div>
+                        <div id="requests-list" class="requests-list">
+                            <!-- Pending requests with Accept/Reject buttons -->
+                        </div>
+
+                        <div class="section-title">Your Family</div>
+                        <div id="connected-list" class="connected-list">
+                            <!-- List of accepted friends -->
+                        </div>
+                    </div>
+                </div>
+        </section>
+
+        <nav class="bottom-nav glass-nav">
+            <button class="nav-item active" data-tab="map">
+                <i data-lucide="map"></i>
+                <span>Map</span>
+            </button>
+            <button class="nav-item" data-tab="family">
+                <i data-lucide="users"></i>
+                <span>Family</span>
+            </button>
+            <button class="nav-item" data-tab="settings">
+                <i data-lucide="settings"></i>
+                <span>Settings</span>
+            </button>
+        </nav>
         </section>
     </div>
 
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        // Configuration will be added later
-        window.firebaseTools = { initializeApp, getFirestore, doc, setDoc, getDoc, getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged };
+        const firebaseConfig = {
+            apiKey: "AIzaSyAEBNic0hQjLif3UfqWPKWI_WbkA-ikfcs",
+            authDomain: "familygps-327c6.firebaseapp.com",
+            projectId: "familygps-327c6",
+            storageBucket: "familygps-327c6.firebasestorage.app",
+            messagingSenderId: "130761268527",
+            appId: "1:130761268527:web:4e3abed33618231bff95da"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        window.firebaseTools = {
+            db, auth, provider,
+            doc, setDoc, getDoc, onSnapshot,
+            collection, query, where, getDocs, addDoc, updateDoc, deleteDoc,
+            signInWithPopup, onAuthStateChanged
+        };
     </script>
 
     <!-- Leaflet JS -->
