@@ -57,15 +57,33 @@ function generateUniqueID() {
 
 // --- Auth Logic ---
 async function handleLogin() {
+    console.log("Sign-in button clicked!");
+    fbTools = getFirebaseTools();
+    if (!fbTools) {
+        alert("Firebase settings are still loading. Please wait 2 seconds and try again.");
+        return;
+    }
+
+    const { auth, provider, signInWithPopup } = fbTools;
     try {
-        await signInWithPopup(auth, provider);
+        console.log("Opening Google Sign-in popup...");
+        const result = await signInWithPopup(auth, provider);
+        console.log("Sign-in Success:", result.user.email);
     } catch (error) {
-        console.error("Login Error:", error);
-        alert("Login failed: " + error.message);
+        console.error("Login Error Detail:", error);
+        let errorMsg = error.message;
+        if (error.code === 'auth/popup-blocked') {
+            errorMsg = "Browser ne popup block kar diya hai. Meherbani karke address bar mein popup allow karein.";
+        } else if (error.code === 'auth/operation-not-allowed') {
+            errorMsg = "Firebase Console mein Google Auth enable nahi kiya gaya.";
+        }
+        alert("Sign-in ERROR: " + errorMsg);
     }
 }
 
 async function checkUserProfile(uid) {
+    fbTools = getFirebaseTools();
+    const { db, doc, getDoc } = fbTools;
     try {
         const userDoc = await getDoc(doc(db, "users", uid));
         if (userDoc.exists()) {
@@ -73,6 +91,7 @@ async function checkUserProfile(uid) {
             document.getElementById('current-user-id').innerText = "#" + profileData.accountId;
             showScreen('app');
         } else {
+            console.log("No profile found for user:", uid);
             showScreen('profile');
         }
     } catch (error) {
