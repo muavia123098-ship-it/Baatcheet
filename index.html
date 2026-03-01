@@ -3,346 +3,167 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, interactive-widget=resizes-content">
-    <title>Baatcheet - Messenger</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#202c33">
-    <link rel="apple-touch-icon" href="logo.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GPS Family Tracker</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- OneSignal Push Notifications -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function (OneSignal) {
-            await OneSignal.init({
-                appId: "97337ba2-f677-46f1-81c0-e22b1cc7987a",
-            });
-        });
-    </script>
 </head>
 
-<body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <header class="header">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="display: flex; flex-direction: column;">
-                        <span id="my-name-display" style="font-weight: 500; font-size: 15px;"></span>
-                        <span id="my-number-display" style="font-size: 12px; color: var(--text-secondary);"></span>
-                    </div>
+<body class="dark-theme">
+    <div id="app">
+        <!-- Auth Screen -->
+        <section id="auth-screen" class="screen active">
+            <div class="auth-card glass-card">
+                <div class="logo-large">
+                    <i data-lucide="map-pin"></i>
+                    <h1>Family Tracker</h1>
                 </div>
-                <div class="header-icons" style="gap: 15px;">
-                    <button id="install-app-btn" class="install-btn hidden">
-                        <i class="fas fa-download"></i> Install App
+                <p>Track your loved ones in real-time</p>
+                <button id="google-login-btn" class="google-btn">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                    <span>Sign in with Google</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Profile Form Screen -->
+        <section id="profile-screen" class="screen">
+            <div class="form-card glass-card">
+                <h2>Complete Profile</h2>
+                <p>Create your unique family account</p>
+                <form id="profile-form">
+                    <div class="input-group">
+                        <label>Full Name</label>
+                        <input type="text" id="p-name" placeholder="Enter your name" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Phone Number</label>
+                        <input type="tel" id="p-phone" placeholder="+92 300 1234567" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Address</label>
+                        <input type="text" id="p-address" placeholder="House #, Street Name" required>
+                    </div>
+                    <div class="input-group">
+                        <label>City</label>
+                        <input type="text" id="p-city" placeholder="e.g. Karachi" required>
+                    </div>
+
+                    <button type="submit" class="primary-btn">
+                        <i data-lucide="user-plus"></i>
+                        Create Account
                     </button>
-                    <div class="menu-container">
-                        <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
-                        <div id="main-menu" class="dropdown-menu hidden">
-                            <div class="dropdown-item" id="profile-menu">Profile</div>
-                            <div class="dropdown-item" id="add-contact-menu">Add Contact</div>
-                            <div class="dropdown-item" id="enable-notifications">Enable Notifications</div>
-                            <div class="dropdown-item" id="refresh-app-menu">Refresh App</div>
-                            <div class="dropdown-item" id="logout-menu">Logout</div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Success Screen (Shows Unique ID) -->
+        <section id="success-screen" class="screen">
+            <div class="success-card glass-card">
+                <div class="check-icon">
+                    <i data-lucide="check-circle"></i>
+                </div>
+                <h2>Account Created!</h2>
+                <p>Share this unique ID with your family</p>
+                <div class="id-display">
+                    <span id="unique-account-id">......</span>
+                    <button id="copy-id-btn" class="icon-btn">
+                        <i data-lucide="copy"></i>
+                    </button>
+                </div>
+                <button id="go-to-map-btn" class="primary-btn">
+                    Start Tracking
+                </button>
+            </div>
+        </section>
+
+        <!-- Main Map App (Hidden till auth) -->
+        <section id="main-app" class="screen">
+            <header class="glass-header">
+                <div class="logo">
+                    <i data-lucide="map-pin"></i>
+                    <h1>Family Tracker</h1>
+                </div>
+                <button id="menu-btn" class="icon-btn">
+                    <i data-lucide="menu"></i>
+                </button>
+            </header>
+
+            <main>
+                <div id="map"></div>
+
+                <div class="bottom-sheet glass-card">
+                    <div class="drag-handle"></div>
+                    <div class="sheet-content">
+                        <div class="status-summary">
+                            <div class="status-item">
+                                <span class="label">Live Members</span>
+                                <span class="value" id="member-count">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Your ID</span>
+                                <span class="value" id="current-user-id">#000000</span>
+                            </div>
+                        </div>
+
+                        <div class="member-list" id="member-list">
+                            <!-- Members will be injected here -->
+                        </div>
+
+                        <div class="actions">
+                            <button id="share-location-btn" class="primary-btn">
+                                <i data-lucide="share-2"></i>
+                                Share Location
+                            </button>
                         </div>
                     </div>
                 </div>
-            </header>
+            </main>
 
-            <div class="search-container">
-                <div class="search-bar">
-                    <i class="fas fa-search" style="color: var(--text-secondary);"></i>
-                    <input type="text" id="chat-search" placeholder="Search or start new chat">
-                </div>
-            </div>
-
-            <div class="chat-list" id="chat-list">
-                <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 10px;"></i>
-                    <p>Loading chats...</p>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Chat Area -->
-        <main class="main-chat" id="main-chat">
-            <header class="chat-header">
-                <!-- Selection Mode Header (Overlay) -->
-                <div id="selection-header" class="selection-header hidden">
-                    <div class="selection-info">
-                        <i class="fas fa-times" id="cancel-selection-btn" title="Cancel"></i>
-                        <span id="selection-count">1</span>
-                    </div>
-                    <div class="selection-actions">
-                        <i class="fas fa-trash" id="delete-selected-btn" title="Delete Selected"></i>
-                    </div>
-                </div>
-
-                <div class="contact-info">
-                    <i class="fas fa-arrow-left back-btn" id="back-btn"></i>
-                    <div class="chat-header-info">
-                        <div id="active-chat-name" class="chat-name">Select a chat</div>
-                        <div id="active-chat-status" class="chat-status"></div>
-                    </div>
-                </div>
-                <div class="header-icons" style="position: relative; gap: 15px;">
-                    <i class="fas fa-video" id="video-call-btn" title="Video Call" style="display: none;"></i>
-                    <i class="fas fa-phone-alt" id="call-btn" title="Voice Call" style="display: none;"></i>
-                    <i class="fas fa-ellipsis-v" id="chat-menu-btn" title="Menu"></i>
-
-                    <!-- Chat Header Dropdown Menu -->
-                    <div id="chat-menu" class="dropdown-menu hidden" style="left: auto; right: 10px; top: 50px;">
-                        <div class="dropdown-item" id="contact-profile-menu">Profile</div>
-                        <div class="dropdown-item" id="clear-chat-menu">Clear Chat</div>
-                        <div class="dropdown-item" id="block-contact-menu" style="color: var(--primary-red);">Block
-                            Contact</div>
-                        <div class="dropdown-item" id="delete-contact-menu" style="color: var(--primary-red);">Delete
-                            Contact</div>
-                    </div>
-                </div>
-            </header>
-
-            <div class="chat-body" id="chat-body">
-                <!-- Messages will be injected by JS -->
-                <div class="message received"
-                    style="align-self: center; background: rgba(0,0,0,0.3); color: var(--text-secondary); border-radius: 8px; margin-top: 20px;">
-                    Welcome to Baatcheet! Select a contact to start chatting.
-                </div>
-            </div>
-
-            <footer class="chat-footer" style="display: none;">
-
-
-                <div class="footer-icons" style="position: relative;">
-                    <i class="far fa-smile footer-btn" id="emoji-btn"></i>
-
-                    <!-- Emoji Picker Popup -->
-                    <div id="emoji-picker" class="emoji-picker hidden">
-                        <span class="emoji">😀</span>
-                        <span class="emoji">😂</span>
-                        <span class="emoji">🥰</span>
-                        <span class="emoji">😎</span>
-                        <span class="emoji">😢</span>
-                        <span class="emoji">😡</span>
-                        <span class="emoji">👍</span>
-                        <span class="emoji">🙏</span>
-                        <span class="emoji">🎉</span>
-                        <span class="emoji">❤️</span>
-                        <span class="emoji">🔥</span>
-                        <span class="emoji">✨</span>
-                    </div>
-                </div>
-                <div class="input-area">
-                    <input type="text" id="message-input" placeholder="Type a message">
-                </div>
-                <i class="fas fa-paper-plane footer-btn" id="send-btn"></i>
-            </footer>
-        </main>
-    </div>
-
-    <!-- Profile Modal -->
-    <div id="profile-modal" class="modal hidden">
-        <div class="modal-content">
-            <header class="modal-header">
-                <h3>Edit Profile</h3>
-                <i class="fas fa-times" id="close-profile-modal"></i>
-            </header>
-            <div class="modal-body profile-edit-body">
-                <div class="input-group">
-                    <label>Your Name</label>
-                    <input type="text" id="edit-profile-name" placeholder="Enter your name">
-                </div>
-            </div>
-            <footer class="modal-footer">
-                <button class="wa-action-btn accept" id="save-profile-btn" style="width: 100%; border-radius: 8px;">Save
-                    Changes</button>
-            </footer>
-        </div>
-    </div>
-
-    <!-- Add Contact Modal -->
-    <div id="add-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Add New Contact</h2>
-            <div class="form-group">
-                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Baatcheet
-                    Number</label>
-                <input type="text" id="new-contact-number" placeholder="e.g. 0200123456">
-            </div>
-            <div class="form-group">
-                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Contact
-                    Name</label>
-                <input type="text" id="new-contact-name" placeholder="Name to save as">
-            </div>
-            <div class="modal-footer">
-                <button class="primary-btn" style="background:#333;width:auto" id="close-modal">Cancel</button>
-                <button class="primary-btn" style="width:auto" id="save-contact-btn">Save Contact</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Centralized Permission Modal [NEW] -->
-    <div id="permission-modal" class="modal-overlay hidden">
-        <div class="modal" style="text-align: center; padding: 30px;">
-            <i class="fas fa-shield-alt" style="font-size: 50px; color: var(--primary-red); margin-bottom: 20px;"></i>
-            <h2 style="margin-bottom: 15px;">Permissions Zaroori Hain</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.6; font-size: 14px;">
-                Behtar experience ke liye humein <b>Microphone, Camera</b> aur <b>Notifications</b> ki ijazat chahiye.
-                Inke baghair calls aur alerts sahi se kaam nahi karain gay.
-            </p>
-            <div
-                style="text-align: left; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; margin-bottom: 25px;">
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
-                    <i class="fas fa-microphone" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Microphone (Voice Calls)</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
-                    <i class="fas fa-video" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Camera (Video Calls)</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <i class="fas fa-bell" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Notifications (Alerts)</span>
-                </div>
-            </div>
-            <button class="primary-btn" id="grant-all-btn"
-                style="padding: 15px; font-size: 16px; margin-bottom: 15px;">Sari Permissions Dein (Allow)</button>
-        </div>
-    </div>
-
-    <!-- Incoming Call Modal -->
-    <div id="incoming-call-modal" class="wa-call-screen hidden">
-        <div class="wa-call-content">
-            <div class="wa-call-status">Incoming Voice Call</div>
-            <div class="wa-caller-name" id="incoming-caller-name">Someone</div>
-        </div>
-        <div class="wa-call-actions">
-            <button class="wa-action-btn btn-reject" id="decline-call-btn" title="Decline">
-                <i class="fas fa-phone-slash"></i>
-            </button>
-            <button class="wa-action-btn btn-accept" id="accept-call-btn" title="Accept"
-                style="transform: rotate(135deg);">
-                <i class="fas fa-phone" style="transform: rotate(-135deg);"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Active Call Modal -->
-    <div id="active-call-modal" class="wa-call-screen hidden">
-        <div class="wa-video-call-container" id="video-container" style="display: none;">
-            <video id="remote-video" autoplay playsinline></video>
-            <video id="local-video" autoplay playsinline muted></video>
-        </div>
-
-        <div class="wa-call-header" id="call-header-ui">
-            <div class="wa-call-status" id="call-status">Ringing...</div>
-            <div class="wa-caller-name" id="active-call-name">Contact Name</div>
-        </div>
-
-        <audio id="local-audio" autoplay muted></audio>
-        <audio id="remote-audio" autoplay></audio>
-        <audio id="ringtone-audio" loop>
-            <source src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" type="audio/mpeg">
-        </audio>
-        <audio id="outgoing-ringtone-audio" loop>
-            <source
-                src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_73069e25d4.mp3?filename=phone-ringing-6804.mp3"
-                type="audio/mpeg">
-        </audio>
-
-        <div class="wa-call-actions">
-            <button class="wa-action-btn wa-secondary-btn" id="mute-btn" title="Mute">
-                <i class="fas fa-microphone"></i>
-            </button>
-            <button class="wa-action-btn wa-secondary-btn" id="camera-btn" title="Camera" style="display: none;">
-                <i class="fas fa-video"></i>
-            </button>
-            <button class="wa-action-btn btn-end" id="end-call-btn" title="End Call">
-                <i class="fas fa-phone-slash"></i>
-            </button>
-            <button class="wa-action-btn wa-secondary-btn" id="speaker-btn" title="Speaker">
-                <i class="fas fa-volume-up"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Message Deletion Modal -->
-    <div id="delete-confirm-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2 id="delete-modal-text">Delete message?</h2>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="delete-for-everyone-btn">Delete for Everyone</button>
-                <button class="primary-btn" id="delete-for-me-btn" style="background: #333;">Delete for Me</button>
-                <button class="primary-btn" id="cancel-delete-btn"
-                    style="background: transparent; border: 1px solid #333; color: #8696a0;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Clear Chat Modal -->
-    <div id="clear-chat-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Clear this chat?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">This will delete all messages in
-                this conversation for you.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-clear-chat-btn">Clear Chat</button>
-                <button class="primary-btn" id="cancel-clear-chat-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Block Contact Modal -->
-    <div id="block-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Block Contact?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Blocked contacts will not be able
-                to call you or send you messages.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-block-btn"
-                    style="background: var(--primary-red);">Block</button>
-                <button class="primary-btn" id="cancel-block-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Contact Modal (Two-way Deletion) -->
-    <div id="delete-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Delete Contact?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Ye contact aur chat history **dono
-                taron se** khatam ho jaye gi. Agle bande ki list se bhi gayab ho jaye ga.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-delete-contact-btn"
-                    style="background: var(--primary-red);">Delete for Both</button>
-                <button class="primary-btn" id="cancel-delete-contact-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
+            <nav class="bottom-nav glass-nav">
+                <button class="nav-item active" data-tab="map">
+                    <i data-lucide="map"></i>
+                    <span>Map</span>
+                </button>
+                <button class="nav-item" data-tab="family">
+                    <i data-lucide="users"></i>
+                    <span>Family</span>
+                </button>
+                <button class="nav-item" data-tab="settings">
+                    <i data-lucide="settings"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+        </section>
     </div>
 
     <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-    <script src="firebase-config.js"></script>
-    <script src="contacts.js"></script>
-    <script src="call.js"></script>
-    <script src="app.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => {
-                console.log('Service Worker Registered');
-            });
-        }
+        // Configuration will be added later
+        window.firebaseTools = { initializeApp, getFirestore, doc, setDoc, getDoc, getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged };
     </script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script src="app.js" type="module"></script>
 </body>
 
 </html>
