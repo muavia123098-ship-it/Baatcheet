@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SecureVault — Biometric Authentication</title>
+    <meta name="theme-color" content="#00aaff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SecureVault">
     <link rel="manifest" href="manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -725,6 +730,15 @@
             <button class="btn" id="btn-register">Enroll Face</button>
             <button class="btn btn-primary" id="btn-unlock">Authenticate</button>
         </div>
+        <!-- Install App button shown on lock screen when browser supports PWA -->
+        <button id="btn-install-lock" style="
+            display:none; margin-top:4px;
+            background:transparent; border:1px solid rgba(0,170,255,0.4);
+            color:#0af; font-family:'Inter',sans-serif;
+            font-size:0.72rem; font-weight:600;
+            padding:8px 22px; border-radius:10px;
+            cursor:pointer; letter-spacing:0.05em;
+            transition:0.2s;">📲 Install App</button>
     </div>
 
     <!-- VAULT SCREEN -->
@@ -1035,22 +1049,29 @@
         // === PWA INSTALLATION ===
         let deferredPrompt;
         const btnInstall = document.getElementById('btn-install');
+        const btnInstallLock = document.getElementById('btn-install-lock');
 
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            btnInstall.style.display = 'block';
-        });
-
-        btnInstall.onclick = async () => {
+        async function triggerInstall() {
             if (!deferredPrompt) return;
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
             if (outcome === 'accepted') {
                 btnInstall.style.display = 'none';
+                btnInstallLock.style.display = 'none';
             }
             deferredPrompt = null;
-        };
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            // Show install button on BOTH lock screen and vault
+            btnInstall.style.display = 'block';
+            btnInstallLock.style.display = 'block';
+        });
+
+        btnInstall.onclick = triggerInstall;
+        btnInstallLock.onclick = triggerInstall;
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
