@@ -3,350 +3,1033 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, interactive-widget=resizes-content">
-    <title>Baatcheet - Messenger</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#202c33">
-    <link rel="apple-touch-icon" href="logo.png">
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <!-- OneSignal Push Notifications -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function (OneSignal) {
-            await OneSignal.init({
-                appId: "97337ba2-f677-46f1-81c0-e22b1cc7987a",
-            });
-        });
-    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureVault — Biometric Authentication</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #0af;
+            --accent2: #7c3aed;
+            --danger: #ef4444;
+            --success: #10b981;
+            --bg-deep: #030712;
+            --bg-card: #0d1117;
+            --bg-border: rgba(255, 255, 255, 0.08);
+            --text-muted: rgba(255, 255, 255, 0.4);
+        }
+
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            background: var(--bg-deep);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: linear-gradient(rgba(0, 170, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 170, 255, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 0%, rgba(0, 170, 255, 0.12) 0%, transparent 60%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* === LOCK SCREEN === */
+        #lock-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 22px;
+        }
+
+        .brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .brand-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 30px rgba(0, 170, 255, 0.3);
+        }
+
+        .brand h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-top: 8px;
+        }
+
+        .brand p {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+
+        #scanner-shell {
+            position: relative;
+            width: 260px;
+            height: 340px;
+            border-radius: 28px;
+            overflow: hidden;
+            background: #000;
+            border: 1.5px solid var(--bg-border);
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+            transition: border-color 0.4s, box-shadow 0.4s;
+        }
+
+        #scanner-shell.granted {
+            border-color: var(--success);
+            box-shadow: 0 0 40px rgba(16, 185, 129, 0.25);
+        }
+
+        #scanner-shell.denied {
+            border-color: var(--danger);
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.25);
+            animation: shake 0.45s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0)
+            }
+
+            20% {
+                transform: translateX(-8px)
+            }
+
+            60% {
+                transform: translateX(8px)
+            }
+
+            80% {
+                transform: translateX(-4px)
+            }
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+            box-shadow: 0 0 14px var(--accent);
+            z-index: 4;
+            animation: scanMove 2.5s linear infinite;
+        }
+
+        @keyframes scanMove {
+            0% {
+                top: 0
+            }
+
+            50% {
+                top: 100%
+            }
+
+            100% {
+                top: 0
+            }
+        }
+
+        .corner {
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            z-index: 5;
+        }
+
+        .corner.tl {
+            top: 12px;
+            left: 12px;
+            border-top: 2px solid var(--accent);
+            border-left: 2px solid var(--accent);
+            border-radius: 4px 0 0 0;
+        }
+
+        .corner.tr {
+            top: 12px;
+            right: 12px;
+            border-top: 2px solid var(--accent);
+            border-right: 2px solid var(--accent);
+            border-radius: 0 4px 0 0;
+        }
+
+        .corner.bl {
+            bottom: 12px;
+            left: 12px;
+            border-bottom: 2px solid var(--accent);
+            border-left: 2px solid var(--accent);
+            border-radius: 0 0 0 4px;
+        }
+
+        .corner.br {
+            bottom: 12px;
+            right: 12px;
+            border-bottom: 2px solid var(--accent);
+            border-right: 2px solid var(--accent);
+            border-radius: 0 0 4px 0;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--bg-border);
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            transition: 0.3s;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: 0.3s;
+        }
+
+        .status-row.online .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .status-row.online {
+            color: #fff;
+        }
+
+        #hud-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+            text-align: center;
+            min-height: 18px;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 11px 22px;
+            border-radius: 12px;
+            border: 1px solid var(--bg-border);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            letter-spacing: 0.03em;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            box-shadow: 0 0 20px rgba(0, 170, 255, 0.25);
+        }
+
+        .btn-primary:hover {
+            background: #29bfff;
+            box-shadow: 0 0 30px rgba(0, 170, 255, 0.4);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: var(--danger);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.25);
+        }
+
+        /* === NAME INPUT MODAL === */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0
+            }
+
+            to {
+                opacity: 1
+            }
+        }
+
+        .modal-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--bg-border);
+            padding: 28px 32px;
+            width: 360px;
+            max-width: 90vw;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-card h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .modal-card p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--bg-border);
+            background: rgba(255, 255, 255, 0.04);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .input-field:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 170, 255, 0.1);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        /* === VAULT SCREEN === */
+        #vault-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            background: var(--bg-deep);
+            display: none;
+            flex-direction: column;
+        }
+
+        .vault-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--bg-border);
+            background: var(--bg-card);
+            flex-shrink: 0;
+        }
+
+        .vault-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .vault-title span {
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        #file-count {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 3px 10px;
+            border-radius: 100px;
+            border: 1px solid var(--bg-border);
+        }
+
+        .vault-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .vault-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 22px 24px;
+        }
+
+        .vault-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .vault-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 12px;
+            color: var(--text-muted);
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+            gap: 12px;
+        }
+
+        .vault-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 14px;
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--bg-border);
+            cursor: pointer;
+            transition: 0.25s;
+        }
+
+        .vault-item:hover {
+            transform: scale(1.03);
+            border-color: var(--accent);
+        }
+
+        .vault-item img,
+        .vault-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .vault-item .del-btn {
+            position: absolute;
+            top: 7px;
+            right: 7px;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.9);
+            border: none;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vault-item:hover .del-btn {
+            display: flex;
+        }
+
+        /* === FACES PANEL === */
+        #faces-panel {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #faces-panel.active {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .faces-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--bg-border);
+            padding: 24px;
+            width: 400px;
+            max-width: 90vw;
+            max-height: 70vh;
+            overflow-y: auto;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+        }
+
+        .faces-card h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .faces-card>p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+        }
+
+        .face-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--bg-border);
+            margin-bottom: 8px;
+        }
+
+        .face-item-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .face-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .face-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .face-date {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .faces-empty {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Upload FAB */
+        #upload-fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 54px;
+            height: 54px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 16px;
+            border: none;
+            cursor: pointer;
+            font-size: 24px;
+            color: #fff;
+            box-shadow: 0 8px 30px rgba(0, 170, 255, 0.35);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: 0.2s;
+            z-index: 21;
+        }
+
+        #upload-fab:hover {
+            transform: scale(1.1);
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 22px;
+            background: var(--bg-card);
+            border: 1px solid var(--bg-border);
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            z-index: 99;
+            display: none;
+            white-space: nowrap;
+        }
+
+        /* Loading */
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: var(--bg-deep);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 2.5px solid var(--bg-border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            font-size: 0.68rem;
+            font-weight: 500;
+            letter-spacing: 0.15em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <header class="header">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="display: flex; flex-direction: column;">
-                        <span id="my-name-display" style="font-weight: 500; font-size: 15px;"></span>
-                        <span id="my-number-display" style="font-size: 12px; color: var(--text-secondary);"></span>
-                    </div>
-                </div>
-                <div class="header-icons" style="gap: 15px;">
-                    <button id="install-app-btn" class="install-btn hidden">
-                        <i class="fas fa-download"></i> Install App
-                    </button>
-                    <div class="menu-container">
-                        <i class="fas fa-ellipsis-v" id="menu-btn" title="Menu"></i>
-                        <div id="main-menu" class="dropdown-menu hidden">
-                            <div class="dropdown-item" id="profile-menu">Profile</div>
-                            <div class="dropdown-item" id="add-contact-menu">Add Contact</div>
-                            <div class="dropdown-item" id="enable-notifications">Enable Notifications</div>
-                            <div class="dropdown-item" id="refresh-app-menu">Refresh App</div>
-                            <div class="dropdown-item" id="logout-menu">Logout</div>
+
+    <!-- LOADING -->
+    <div id="loading-screen">
+        <div
+            style="width:44px;height:44px;background:linear-gradient(135deg,#0af,#7c3aed);border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;">
+            🔐</div>
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">Loading AI Engine...</div>
+    </div>
+
+    <!-- NAME INPUT MODAL -->
+    <div class="modal-overlay" id="name-modal">
+        <div class="modal-card">
+            <h3>👤 Name This Face</h3>
+            <p>Face scanned successfully. Enter a name to save this identity.</p>
+            <input class="input-field" type="text" id="name-input" placeholder="e.g. Muavia, Brother, Friend...">
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveFace()">Save Identity</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOCK SCREEN -->
+    <div id="lock-screen">
+        <div class="brand">
+            <div class="brand-icon">🔐</div>
+            <h1>SecureVault</h1>
+            <p>Biometric Protection System</p>
+        </div>
+        <div id="scanner-shell">
+            <video id="webcam" autoplay muted playsinline></video>
+            <canvas id="overlay"></canvas>
+            <div class="scan-line"></div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+        </div>
+        <div class="status-row" id="status-row">
+            <div class="status-dot"></div>
+            <span id="status-text">Initializing...</span>
+        </div>
+        <div id="hud-label">Preparing biometric engine...</div>
+        <div class="btn-row">
+            <button class="btn" id="btn-register">Enroll Face</button>
+            <button class="btn btn-primary" id="btn-unlock">Authenticate</button>
+        </div>
+    </div>
+
+    <!-- VAULT SCREEN -->
+    <div id="vault-screen">
+        <div class="vault-header">
+            <div class="vault-title">
+                <span>🔓 SecureVault</span>
+                <span id="file-count">0 items</span>
+            </div>
+            <div class="vault-actions">
+                <button class="btn" onclick="openFacesPanel()" style="font-size:0.72rem;padding:8px 16px;">👤 Manage
+                    Faces</button>
+                <button class="btn" onclick="lockVault()" style="font-size:0.72rem;padding:8px 16px;">🔒 Lock</button>
+            </div>
+        </div>
+        <div class="vault-body" id="vault-body">
+            <div class="empty-state" id="empty-state">
+                <div style="font-size:3rem;opacity:0.25;">📂</div>
+                <p style="font-size:0.85rem;">Your vault is empty</p>
+                <p style="font-size:0.75rem;color:var(--text-muted);">Tap <strong>+</strong> below to add photos or
+                    videos</p>
+            </div>
+            <div class="gallery-grid" id="gallery-grid" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- FACES PANEL -->
+    <div id="faces-panel">
+        <div class="faces-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin-bottom:0;">Registered Identities</h3>
+                <button class="btn btn-primary" onclick="startEnrollFromVault()"
+                    style="font-size:0.7rem; padding:6px 14px;">+ Add New</button>
+            </div>
+            <p>Faces that can unlock this vault</p>
+            <div id="faces-list"></div>
+            <div style="margin-top:14px;display:flex;justify-content:flex-end;">
+                <button class="btn" onclick="closeFacesPanel()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="upload-fab" title="Add files to vault">＋</button>
+    <input type="file" id="file-input" accept="image/*,video/*" multiple style="display:none;">
+    <div id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const statusRow = document.getElementById('status-row');
+        const statusText = document.getElementById('status-text');
+        const hudLabel = document.getElementById('hud-label');
+        const scannerShell = document.getElementById('scanner-shell');
+        const vaultScreen = document.getElementById('vault-screen');
+        const loadingScreen = document.getElementById('loading-screen');
+        const uploadFab = document.getElementById('upload-fab');
+        const fileInput = document.getElementById('file-input');
+        const nameModal = document.getElementById('name-modal');
+        const btnRegister = document.getElementById('btn-register');
+        const btnUnlock = document.getElementById('btn-unlock');
+
+        const FACES_KEY = 'sv_faces';   // [{name, date, descriptor[]}]
+        const VAULT_KEY = 'sv_vault_files';
+
+        let isReady = false;
+        let isProcessing = false;
+        let pendingDescriptor = null; // stores face descriptor before naming
+        let enrollmentReturnToVault = false;
+
+        function getFaces() { try { return JSON.parse(localStorage.getItem(FACES_KEY) || '[]'); } catch { return []; } }
+        function saveFacesData(f) { localStorage.setItem(FACES_KEY, JSON.stringify(f)); }
+
+        function updateLockScreenButtons() {
+            const faces = getFaces();
+            if (faces.length > 0) {
+                btnRegister.style.display = 'none';
+                btnUnlock.style.display = 'block';
+                hudLabel.textContent = `${faces.length} identity enrolled. Authenticate to enter.`;
+            } else {
+                btnRegister.style.display = 'block';
+                btnUnlock.style.display = 'none';
+                hudLabel.textContent = 'Setup required. Enroll your face to begin.';
+            }
+        }
+
+        function buildMatchers() {
+            const faces = getFaces();
+            if (!faces.length) return null;
+            const labeled = faces.map(f => new faceapi.LabeledFaceDescriptors(f.name, [new Float32Array(f.descriptor)]));
+            return new faceapi.FaceMatcher(labeled, 0.42);
+        }
+
+        async function initAI() {
+            const MODEL_URL = 'https://raw.githubusercontent.com/vladmandic/face-api/master/model/';
+            document.getElementById('loading-text').textContent = 'Loading AI Core...';
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
+
+            loadingScreen.style.display = 'none';
+            statusRow.classList.add('online');
+            statusText.textContent = 'System Ready';
+            isReady = true;
+
+            updateLockScreenButtons();
+            startVideo();
+            requestAnimationFrame(liveDraw);
+        }
+
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+                .then(s => {
+                    video.srcObject = s;
+                    video.onloadedmetadata = () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; };
+                }).catch(() => alert('Camera access required!'));
+        }
+
+        async function liveDraw() {
+            if (isReady && !isProcessing) {
+                const det = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 })).withFaceLandmarks();
+                const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (det) {
+                    const dims = faceapi.matchDimensions(canvas, video, true);
+                    const res = faceapi.resizeResults(det, dims);
+                    ctx.fillStyle = '#0af';
+                    res.landmarks.positions.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, 2 * Math.PI); ctx.fill(); });
+                }
+            }
+            requestAnimationFrame(liveDraw);
+        }
+
+        async function scan() {
+            isProcessing = true;
+            let result = null;
+            const start = Date.now();
+            while (Date.now() - start < 4000) {
+                const pct = Math.min(99, Math.round((Date.now() - start) / 40));
+                hudLabel.textContent = `Scanning... ${pct}%`;
+                const d = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 })).withFaceLandmarks().withFaceDescriptor();
+                if (d) { result = d; hudLabel.textContent = 'Scan complete.'; break; }
+                await new Promise(r => setTimeout(r, 200));
+            }
+            isProcessing = false;
+            return result;
+        }
+
+        // REGISTER
+        btnRegister.onclick = startEnroll;
+
+        function startEnroll() {
+            if (!isReady || isProcessing) return;
+            enrollFace();
+        }
+
+        async function enrollFace() {
+            const det = await scan();
+            if (det) {
+                pendingDescriptor = det.descriptor;
+                nameModal.classList.add('active');
+                document.getElementById('name-input').value = '';
+                setTimeout(() => document.getElementById('name-input').focus(), 100);
+            } else {
+                hudLabel.textContent = 'Could not detect face. Try again.';
+                flash('denied');
+            }
+        }
+
+        function startEnrollFromVault() {
+            closeFacesPanel();
+            enrollmentReturnToVault = true;
+            vaultScreen.style.display = 'none';
+            uploadFab.style.display = 'none';
+            hudLabel.textContent = 'Registering new identity...';
+            startEnroll();
+        }
+
+        function closeModal() { nameModal.classList.remove('active'); pendingDescriptor = null; }
+
+        function saveFace() {
+            const name = document.getElementById('name-input').value.trim();
+            if (!name) { document.getElementById('name-input').style.borderColor = 'var(--danger)'; return; }
+            const faces = getFaces();
+            faces.push({ name, date: new Date().toLocaleDateString(), descriptor: Array.from(pendingDescriptor) });
+            saveFacesData(faces);
+            closeModal();
+            flash('granted');
+            toast(`✓ ${name} registered`);
+
+            if (enrollmentReturnToVault) {
+                enrollmentReturnToVault = false;
+                setTimeout(openVault, 1000);
+            } else {
+                updateLockScreenButtons();
+            }
+        }
+
+        document.getElementById('name-input').addEventListener('keydown', e => { if (e.key === 'Enter') saveFace(); });
+
+        // UNLOCK
+        btnUnlock.onclick = async () => {
+            if (!isReady || isProcessing) return;
+            const det = await scan();
+            if (det) {
+                const matcher = buildMatchers();
+                const match = matcher.findBestMatch(det.descriptor);
+                console.log('Match:', match.label, 'Distance:', match.distance);
+                if (match.label !== 'unknown' && match.distance < 0.42) {
+                    hudLabel.textContent = `Welcome, ${match.label}.`;
+                    flash('granted');
+                    setTimeout(openVault, 900);
+                } else {
+                    hudLabel.textContent = 'Unauthorized access attempt.';
+                    flash('denied'); toast('Access Denied');
+                }
+            } else {
+                hudLabel.textContent = 'No face detected.';
+            }
+        };
+
+        function flash(type) {
+            scannerShell.classList.remove('granted', 'denied');
+            scannerShell.classList.add(type);
+            setTimeout(() => scannerShell.classList.remove(type), 1800);
+        }
+
+        function toast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 2500);
+        }
+
+        // === VAULT ===
+        function openVault() { vaultScreen.style.display = 'flex'; uploadFab.style.display = 'flex'; renderGallery(); }
+        function lockVault() { vaultScreen.style.display = 'none'; uploadFab.style.display = 'none'; updateLockScreenButtons(); }
+
+        function getFiles() { try { return JSON.parse(localStorage.getItem(VAULT_KEY) || '[]'); } catch { return []; } }
+        function saveFiles(f) { localStorage.setItem(VAULT_KEY, JSON.stringify(f)); }
+
+        function renderGallery() {
+            const files = getFiles();
+            const grid = document.getElementById('gallery-grid');
+            const empty = document.getElementById('empty-state');
+            document.getElementById('file-count').textContent = `${files.length} items`;
+            if (!files.length) { empty.style.display = 'flex'; grid.style.display = 'none'; return; }
+            empty.style.display = 'none'; grid.style.display = 'grid';
+            grid.innerHTML = files.map((f, i) => `
+            <div class="vault-item">
+                ${f.type.startsWith('video') ? `<video src="${f.data}" muted loop playsinline onclick="this.paused?this.play():this.pause()"></video>` : `<img src="${f.data}">`}
+                <button class="del-btn" onclick="deleteFile(${i})">×</button>
+            </div>`).join('');
+        }
+
+        function deleteFile(i) { const f = getFiles(); f.splice(i, 1); saveFiles(f); renderGallery(); }
+
+        uploadFab.onclick = () => fileInput.click();
+        fileInput.onchange = async (e) => {
+            const files = getFiles();
+            for (const file of e.target.files) {
+                const data = await new Promise(res => { const r = new FileReader(); r.onload = x => res(x.target.result); r.readAsDataURL(file); });
+                files.push({ name: file.name, type: file.type, data });
+            }
+            saveFiles(files); renderGallery(); toast(`Added ${e.target.files.length} items`);
+            fileInput.value = '';
+        };
+
+        // === FACES PANEL ===
+        function openFacesPanel() {
+            const panel = document.getElementById('faces-panel');
+            const list = document.getElementById('faces-list');
+            const faces = getFaces();
+            if (!faces.length) {
+                list.innerHTML = '<div class="faces-empty">No identities registered.</div>';
+            } else {
+                list.innerHTML = faces.map((f, i) => `
+                <div class="face-item">
+                    <div class="face-item-info">
+                        <div class="face-avatar">${f.name.charAt(0).toUpperCase()}</div>
+                        <div>
+                            <div class="face-name">${f.name}</div>
+                            <div class="face-date">Enrolled: ${f.date}</div>
                         </div>
                     </div>
-                </div>
-            </header>
-
-            <div class="search-container">
-                <div class="search-bar">
-                    <i class="fas fa-search" style="color: var(--text-secondary);"></i>
-                    <input type="text" id="chat-search" placeholder="Search or start new chat">
-                </div>
-            </div>
-
-            <div class="chat-list" id="chat-list">
-                <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 10px;"></i>
-                    <p>Loading chats...</p>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Chat Area -->
-        <main class="main-chat" id="main-chat">
-            <header class="chat-header">
-                <!-- Selection Mode Header (Overlay) -->
-                <div id="selection-header" class="selection-header hidden">
-                    <div class="selection-info">
-                        <i class="fas fa-times" id="cancel-selection-btn" title="Cancel"></i>
-                        <span id="selection-count">1</span>
-                    </div>
-                    <div class="selection-actions">
-                        <i class="fas fa-trash" id="delete-selected-btn" title="Delete Selected"></i>
-                    </div>
-                </div>
-
-                <div class="contact-info">
-                    <i class="fas fa-arrow-left back-btn" id="back-btn"></i>
-                    <div class="chat-header-info">
-                        <div id="active-chat-name" class="chat-name">Select a chat</div>
-                        <div id="active-chat-status" class="chat-status"></div>
-                    </div>
-                </div>
-                <div class="header-icons" style="position: relative; gap: 15px;">
-                    <i class="fas fa-video" id="video-call-btn" title="Video Call" style="display: none;"></i>
-                    <i class="fas fa-phone-alt" id="call-btn" title="Voice Call" style="display: none;"></i>
-                    <i class="fas fa-ellipsis-v" id="chat-menu-btn" title="Menu"></i>
-
-                    <!-- Chat Header Dropdown Menu -->
-                    <div id="chat-menu" class="dropdown-menu hidden" style="left: auto; right: 10px; top: 50px;">
-                        <div class="dropdown-item" id="contact-profile-menu">Profile</div>
-                        <div class="dropdown-item" id="clear-chat-menu">Clear Chat</div>
-                        <div class="dropdown-item" id="block-contact-menu" style="color: var(--primary-red);">Block
-                            Contact</div>
-                        <div class="dropdown-item" id="delete-contact-menu" style="color: var(--primary-red);">Delete
-                            Contact</div>
-                    </div>
-                </div>
-            </header>
-
-            <div class="chat-body" id="chat-body">
-                <!-- Messages will be injected by JS -->
-                <div class="message received"
-                    style="align-self: center; background: rgba(0,0,0,0.3); color: var(--text-secondary); border-radius: 8px; margin-top: 20px;">
-                    Welcome to Baatcheet! Select a contact to start chatting.
-                </div>
-            </div>
-
-            <footer class="chat-footer" style="display: none;">
-
-
-                <div class="footer-icons" style="position: relative;">
-                    <i class="far fa-smile footer-btn" id="emoji-btn"></i>
-                    <i class="fas fa-plus footer-btn" id="attach-btn" title="Attach File"></i>
-
-                    <!-- Emoji Picker Popup -->
-                    <div id="emoji-picker" class="emoji-picker hidden">
-                        <span class="emoji">😀</span>
-                        <span class="emoji">😂</span>
-                        <span class="emoji">🥰</span>
-                        <span class="emoji">😎</span>
-                        <span class="emoji">😢</span>
-                        <span class="emoji">😡</span>
-                        <span class="emoji">👍</span>
-                        <span class="emoji">🙏</span>
-                        <span class="emoji">🎉</span>
-                        <span class="emoji">❤️</span>
-                        <span class="emoji">🔥</span>
-                        <span class="emoji">✨</span>
-                    </div>
-                </div>
-                <div class="input-area">
-                    <input type="text" id="message-input" placeholder="Type a message">
-                </div>
-                <i class="fas fa-paper-plane footer-btn" id="send-btn"></i>
-            </footer>
-        </main>
-    </div>
-
-    <!-- Profile Modal -->
-    <div id="profile-modal" class="modal hidden">
-        <div class="modal-content">
-            <header class="modal-header">
-                <h3>Edit Profile</h3>
-                <i class="fas fa-times" id="close-profile-modal"></i>
-            </header>
-            <div class="modal-body profile-edit-body">
-                <div class="input-group">
-                    <label>Your Name</label>
-                    <input type="text" id="edit-profile-name" placeholder="Enter your name">
-                </div>
-            </div>
-            <footer class="modal-footer">
-                <button class="wa-action-btn accept" id="save-profile-btn" style="width: 100%; border-radius: 8px;">Save
-                    Changes</button>
-            </footer>
-        </div>
-    </div>
-
-    <!-- Add Contact Modal -->
-    <div id="add-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Add New Contact</h2>
-            <div class="form-group">
-                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Baatcheet
-                    Number</label>
-                <input type="text" id="new-contact-number" placeholder="e.g. 0200123456">
-            </div>
-            <div class="form-group">
-                <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--text-secondary)">Contact
-                    Name</label>
-                <input type="text" id="new-contact-name" placeholder="Name to save as">
-            </div>
-            <div class="modal-footer">
-                <button class="primary-btn" style="background:#333;width:auto" id="close-modal">Cancel</button>
-                <button class="primary-btn" style="width:auto" id="save-contact-btn">Save Contact</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Centralized Permission Modal [NEW] -->
-    <div id="permission-modal" class="modal-overlay hidden">
-        <div class="modal" style="text-align: center; padding: 30px;">
-            <i class="fas fa-shield-alt" style="font-size: 50px; color: var(--primary-red); margin-bottom: 20px;"></i>
-            <h2 style="margin-bottom: 15px;">Permissions Zaroori Hain</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.6; font-size: 14px;">
-                Behtar experience ke liye humein <b>Microphone, Camera</b> aur <b>Notifications</b> ki ijazat chahiye.
-                Inke baghair calls aur alerts sahi se kaam nahi karain gay.
-            </p>
-            <div
-                style="text-align: left; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; margin-bottom: 25px;">
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
-                    <i class="fas fa-microphone" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Microphone (Voice Calls)</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
-                    <i class="fas fa-video" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Camera (Video Calls)</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <i class="fas fa-bell" style="color: #00a884; width: 20px;"></i>
-                    <span style="font-size: 14px;">Notifications (Alerts)</span>
-                </div>
-            </div>
-            <button class="primary-btn" id="grant-all-btn"
-                style="padding: 15px; font-size: 16px; margin-bottom: 15px;">Sari Permissions Dein (Allow)</button>
-        </div>
-    </div>
-
-    <!-- Incoming Call Modal -->
-    <div id="incoming-call-modal" class="wa-call-screen hidden">
-        <div class="wa-call-content">
-            <div class="wa-call-status">Incoming Voice Call</div>
-            <div class="wa-caller-name" id="incoming-caller-name">Someone</div>
-        </div>
-        <div class="wa-call-actions">
-            <button class="wa-action-btn btn-reject" id="decline-call-btn" title="Decline">
-                <i class="fas fa-phone-slash"></i>
-            </button>
-            <button class="wa-action-btn btn-accept" id="accept-call-btn" title="Accept"
-                style="transform: rotate(135deg);">
-                <i class="fas fa-phone" style="transform: rotate(-135deg);"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Active Call Modal -->
-    <div id="active-call-modal" class="wa-call-screen hidden">
-        <div class="wa-video-call-container" id="video-container" style="display: none;">
-            <video id="remote-video" autoplay playsinline></video>
-            <video id="local-video" autoplay playsinline muted></video>
-        </div>
-
-        <div class="wa-call-header" id="call-header-ui">
-            <div class="wa-call-status" id="call-status">Ringing...</div>
-            <div class="wa-caller-name" id="active-call-name">Contact Name</div>
-        </div>
-
-        <audio id="local-audio" autoplay muted></audio>
-        <audio id="remote-audio" autoplay></audio>
-        <audio id="ringtone-audio" loop>
-            <source src="https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3" type="audio/mpeg">
-        </audio>
-        <audio id="outgoing-ringtone-audio" loop>
-            <source
-                src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_73069e25d4.mp3?filename=phone-ringing-6804.mp3"
-                type="audio/mpeg">
-        </audio>
-
-        <div class="wa-call-actions">
-            <button class="wa-action-btn wa-secondary-btn" id="mute-btn" title="Mute">
-                <i class="fas fa-microphone"></i>
-            </button>
-            <button class="wa-action-btn wa-secondary-btn" id="camera-btn" title="Camera" style="display: none;">
-                <i class="fas fa-video"></i>
-            </button>
-            <button class="wa-action-btn btn-end" id="end-call-btn" title="End Call">
-                <i class="fas fa-phone-slash"></i>
-            </button>
-            <button class="wa-action-btn wa-secondary-btn" id="speaker-btn" title="Speaker">
-                <i class="fas fa-volume-up"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Message Deletion Modal -->
-    <div id="delete-confirm-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2 id="delete-modal-text">Delete message?</h2>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="delete-for-everyone-btn">Delete for Everyone</button>
-                <button class="primary-btn" id="delete-for-me-btn" style="background: #333;">Delete for Me</button>
-                <button class="primary-btn" id="cancel-delete-btn"
-                    style="background: transparent; border: 1px solid #333; color: #8696a0;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Clear Chat Modal -->
-    <div id="clear-chat-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Clear this chat?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">This will delete all messages in
-                this conversation for you.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-clear-chat-btn">Clear Chat</button>
-                <button class="primary-btn" id="cancel-clear-chat-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Block Contact Modal -->
-    <div id="block-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Block Contact?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Blocked contacts will not be able
-                to call you or send you messages.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-block-btn"
-                    style="background: var(--primary-red);">Block</button>
-                <button class="primary-btn" id="cancel-block-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Contact Modal (Two-way Deletion) -->
-    <div id="delete-contact-modal" class="modal-overlay hidden">
-        <div class="modal">
-            <h2>Delete Contact?</h2>
-            <p style="color: var(--text-secondary); margin: 10px 0; font-size: 14px;">Ye contact aur chat history **dono
-                taron se** khatam ho jaye gi. Agle bande ki list se bhi gayab ho jaye ga.</p>
-            <div class="modal-footer" style="flex-direction: column; gap: 10px;">
-                <button class="primary-btn" id="confirm-delete-contact-btn"
-                    style="background: var(--primary-red);">Delete for Both</button>
-                <button class="primary-btn" id="cancel-delete-contact-btn"
-                    style="background: transparent; border: 1px solid #333;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
-
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="socket.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="contacts.js"></script>
-    <script src="call.js"></script>
-    <script src="app.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(() => {
-                console.log('Service Worker Registered');
-            });
+                    <button class="btn btn-danger" style="font-size:0.7rem;padding:7px 14px;" onclick="deleteFace(${i})">Remove</button>
+                </div>`).join('');
+            }
+            panel.classList.add('active');
         }
+
+        function closeFacesPanel() { document.getElementById('faces-panel').classList.remove('active'); }
+
+        function deleteFace(i) {
+            const faces = getFaces();
+            const name = faces[i].name;
+            faces.splice(i, 1);
+            saveFacesData(faces);
+            toast(`"${name}" removed`);
+            openFacesPanel(); // refresh
+            if (faces.length === 0) lockVault();
+            updateLockScreenButtons();
+        }
+
+        initAI().catch(e => { console.error(e); alert('AI load failed. Check internet.'); });
     </script>
-    <input type="file" id="file-input" style="display: none;">
 </body>
 
 </html>
