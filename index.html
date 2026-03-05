@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SecureVault — Biometric Authentication</title>
+    <link rel="manifest" href="manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -734,6 +735,9 @@
                 <span id="file-count">0 items</span>
             </div>
             <div class="vault-actions">
+                <button class="btn" id="btn-install"
+                    style="display:none;font-size:0.72rem;padding:8px 16px;background:rgba(0,170,255,0.1);border-color:var(--accent);">📲
+                    Install App</button>
                 <button class="btn" onclick="openFacesPanel()" style="font-size:0.72rem;padding:8px 16px;">👤 Manage
                     Faces</button>
                 <button class="btn" onclick="lockVault()" style="font-size:0.72rem;padding:8px 16px;">🔒 Lock</button>
@@ -1026,6 +1030,32 @@
             openFacesPanel(); // refresh
             if (faces.length === 0) lockVault();
             updateLockScreenButtons();
+        }
+
+        // === PWA INSTALLATION ===
+        let deferredPrompt;
+        const btnInstall = document.getElementById('btn-install');
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            btnInstall.style.display = 'block';
+        });
+
+        btnInstall.onclick = async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                btnInstall.style.display = 'none';
+            }
+            deferredPrompt = null;
+        };
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW registration failed:', err));
+            });
         }
 
         initAI().catch(e => { console.error(e); alert('AI load failed. Check internet.'); });

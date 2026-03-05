@@ -1,65 +1,19 @@
+const CACHE_NAME = 'secure-vault-v1';
+const ASSETS = [
+    './index.html',
+    './manifest.json',
+    'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
+];
+
 self.addEventListener('install', (e) => {
-    // Force the waiting service worker to become the active service worker
-    self.skipWaiting();
-});
-
-self.addEventListener('fetch', (event) => {
-    const url = new URL(event.request.url);
-    // Only handle same-origin requests — let external APIs (OneSignal, Firebase, etc.) pass through untouched
-    if (url.origin !== self.location.origin) {
-        return; // Let browser handle external requests normally
-    }
-
-    event.respondWith(
-        fetch(event.request).catch((err) => {
-            console.warn("[SW] Fetch failed for:", event.request.url, err);
-            // Return an empty response instead of letting respondWith fail
-            return new Response(null, { status: 404 });
-        })
+    e.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
     );
 });
 
-self.addEventListener('notificationclick', function (event) {
-    event.notification.close();
-
-    // Check for button actions
-    if (event.action === 'accept') {
-        event.waitUntil(
-            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-                for (var i = 0; i < clientList.length; i++) {
-                    var client = clientList[i];
-                    if (client.url.includes('index.html') && 'focus' in client) {
-                        return client.focus();
-                    }
-                }
-                if (clients.openWindow) {
-                    return clients.openWindow('./index.html');
-                }
-            })
-        );
-    } else if (event.action === 'decline') {
-        // Find the Baatcheet client and send a message to trigger endCall()
-        event.waitUntil(
-            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-                clientList.forEach(client => {
-                    client.postMessage({ type: 'DECLINE_CALL' });
-                });
-            })
-        );
-    } else {
-        // Normal click on notification body: just focus
-        event.waitUntil(
-            clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-                for (var i = 0; i < clientList.length; i++) {
-                    var client = clientList[i];
-                    if (client.url.includes('index.html') && 'focus' in client) {
-                        return client.focus();
-                    }
-                }
-                if (clients.openWindow) {
-                    return clients.openWindow('./index.html');
-                }
-            })
-        );
-    }
+self.addEventListener('fetch', (e) => {
+    e.respondWith(
+        caches.match(e.request).then((res) => res || fetch(e.request))
+    );
 });
