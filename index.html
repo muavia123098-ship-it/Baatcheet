@@ -705,6 +705,41 @@
         </div>
     </div>
 
+    <!-- SET PIN MODAL -->
+    <div class="modal-overlay" id="set-pin-modal">
+        <div class="modal-card">
+            <h3>🔑 Set Backup PIN</h3>
+            <p>Create a 4–6 digit PIN to unlock vault if face scan fails.</p>
+            <input class="input-field" type="password" id="set-pin-input" inputmode="numeric" maxlength="6"
+                placeholder="Enter PIN (4–6 digits)">
+            <input class="input-field" type="password" id="set-pin-confirm" inputmode="numeric" maxlength="6"
+                placeholder="Confirm PIN" style="margin-top:-4px;">
+            <p id="pin-error"
+                style="color:var(--danger);font-size:0.72rem;margin-top:-8px;margin-bottom:8px;display:none;"></p>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeSetPin()">Cancel</button>
+                <button class="btn btn-primary" onclick="savePin()">Save PIN</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ENTER PIN MODAL -->
+    <div class="modal-overlay" id="enter-pin-modal">
+        <div class="modal-card">
+            <h3>🔑 Enter PIN</h3>
+            <p>Enter your backup PIN to unlock the vault.</p>
+            <input class="input-field" type="password" id="enter-pin-input" inputmode="numeric" maxlength="6"
+                placeholder="Your PIN">
+            <p id="pin-wrong"
+                style="color:var(--danger);font-size:0.72rem;margin-top:-8px;margin-bottom:8px;display:none;">Incorrect
+                PIN. Try again.</p>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeEnterPin()">Cancel</button>
+                <button class="btn btn-primary" onclick="checkPin()">Unlock</button>
+            </div>
+        </div>
+    </div>
+
     <!-- LOCK SCREEN -->
     <div id="lock-screen">
         <div class="brand">
@@ -729,6 +764,12 @@
         <div class="btn-row">
             <button class="btn" id="btn-register">Enroll Face</button>
             <button class="btn btn-primary" id="btn-unlock">Authenticate</button>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn" id="btn-pin-action" onclick="openPinAction()"
+                style="font-size:0.72rem;padding:8px 18px;background:rgba(255,255,255,0.04);">
+                🔑 Use PIN
+            </button>
         </div>
         <!-- Install App button shown on lock screen when browser supports PWA -->
         <button id="btn-install-lock" style="
@@ -1045,6 +1086,69 @@
             if (faces.length === 0) lockVault();
             updateLockScreenButtons();
         }
+
+        // === PIN BACKUP ===
+        const PIN_KEY = 'sv_pin_hash';
+
+        async function hashPin(pin) {
+            const encoded = new TextEncoder().encode(pin + '_sv_salt');
+            const buf = await crypto.subtle.digest('SHA-256', encoded);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function openPinAction() {
+            const hasPin = !!localStorage.getItem(PIN_KEY);
+            if (hasPin) {
+                // Open the Enter PIN modal
+                document.getElementById('pin-wrong').style.display = 'none';
+                document.getElementById('enter-pin-input').value = '';
+                document.getElementById('enter-pin-modal').classList.add('active');
+                setTimeout(() => document.getElementById('enter-pin-input').focus(), 100);
+            } else {
+                // Open Set PIN modal
+                document.getElementById('set-pin-input').value = '';
+                document.getElementById('set-pin-confirm').value = '';
+                document.getElementById('pin-error').style.display = 'none';
+                document.getElementById('set-pin-modal').classList.add('active');
+                setTimeout(() => document.getElementById('set-pin-input').focus(), 100);
+            }
+        }
+
+        function closeSetPin() { document.getElementById('set-pin-modal').classList.remove('active'); }
+        function closeEnterPin() { document.getElementById('enter-pin-modal').classList.remove('active'); }
+
+        async function savePin() {
+            const pin = document.getElementById('set-pin-input').value.trim();
+            const confirm = document.getElementById('set-pin-confirm').value.trim();
+            const errEl = document.getElementById('pin-error');
+            if (pin.length < 4) { errEl.textContent = 'PIN must be at least 4 digits.'; errEl.style.display = 'block'; return; }
+            if (pin !== confirm) { errEl.textContent = 'PINs do not match. Try again.'; errEl.style.display = 'block'; return; }
+            const hash = await hashPin(pin);
+            localStorage.setItem(PIN_KEY, hash);
+            closeSetPin();
+            toast('✓ PIN saved successfully');
+            // Update button label
+            document.querySelector('#btn-pin-action').textContent = '🔑 Use PIN';
+        }
+
+        async function checkPin() {
+            const pin = document.getElementById('enter-pin-input').value.trim();
+            const hash = await hashPin(pin);
+            const saved = localStorage.getItem(PIN_KEY);
+            if (hash === saved) {
+                closeEnterPin();
+                hudLabel.textContent = 'PIN accepted. Welcome!';
+                flash('granted');
+                setTimeout(openVault, 800);
+            } else {
+                document.getElementById('pin-wrong').style.display = 'block';
+                document.getElementById('enter-pin-input').value = '';
+            }
+        }
+
+        // Allow Enter key in PIN inputs
+        document.getElementById('enter-pin-input').addEventListener('keydown', e => { if (e.key === 'Enter') checkPin(); });
+        document.getElementById('set-pin-confirm').addEventListener('keydown', e => { if (e.key === 'Enter') savePin(); });
 
         // === PWA INSTALLATION ===
         let deferredPrompt;
