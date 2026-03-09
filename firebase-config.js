@@ -15,7 +15,7 @@ import {
     setDoc,
     where,
     increment
-} from "https://malikmuavia-fireclone-backend.hf.space/fireclone-sdk.js";
+} from "./fireclone-sdk.js";
 
 const firebaseConfig = {
     projectId: "69ad3c60fbc006ad975762e8" // Your FireClone Project ID

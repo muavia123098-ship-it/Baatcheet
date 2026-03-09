@@ -87,38 +87,36 @@ function initHeroSlideshow() {
 
     function changeBackground() {
         if (images.length === 0) {
-            let img = defaultImage;
-            slides[0].style.backgroundImage = `${overlay}, url('${img}')`;
+            slides[0].style.backgroundImage = `${overlay}, url('${defaultImage}')`;
             slides[0].classList.add('active');
             return;
         }
 
         let nextImage = images[currentIndex];
-        // Ensure https:// protocol if missing and not a data URI
-        if (nextImage && !nextImage.startsWith('http') && !nextImage.startsWith('data:')) {
+        // Only fix protocol if it doesn't already have one and doesn't start with //
+        if (nextImage && !nextImage.startsWith('http') && !nextImage.startsWith('data:') && !nextImage.startsWith('//')) {
             nextImage = 'https://' + nextImage;
         }
 
         const nextSlideIndex = (activeSlideIndex + 1) % slides.length;
-
-        // 1. Set next image on INACTIVE slide (next one)
-        slides[nextSlideIndex].style.backgroundImage = `${overlay}, url('${nextImage}')`;
-
-        // 2. Cross-fade
-        // Remove active class from CURRENT slide to fade it out
-        slides[activeSlideIndex].classList.remove('active');
-        // Add active class to NEXT slide to fade it in
-        slides[nextSlideIndex].classList.add('active');
-
-        // 3. Update indices
-        activeSlideIndex = nextSlideIndex;
-        currentIndex = (currentIndex + 1) % images.length;
+        const img = new Image();
+        img.onload = () => {
+            slides[nextSlideIndex].style.backgroundImage = `${overlay}, url('${nextImage}')`;
+            slides[activeSlideIndex].classList.remove('active');
+            slides[nextSlideIndex].classList.add('active');
+            activeSlideIndex = nextSlideIndex;
+            currentIndex = (currentIndex + 1) % images.length;
+        };
+        img.onerror = () => {
+            console.error("Hero image failed to load:", nextImage);
+            currentIndex = (currentIndex + 1) % images.length;
+            if (images.length > 1) changeBackground();
+        };
+        img.src = nextImage;
     }
 
     function startSlideshow() {
         if (slideInterval) clearInterval(slideInterval);
-
-        // Reset state for new image set
         activeSlideIndex = 0;
         slides.forEach(s => s.classList.remove('active'));
 
@@ -132,14 +130,14 @@ function initHeroSlideshow() {
         }
     }
 
-    // Real-time Hero Images from Firebase
+    // Real-time Hero Images from FireClone
     onSnapshot(query(collection(db, "heroImages"), orderBy("createdAt", "asc")), (snapshot) => {
         const newImages = [];
         snapshot.forEach((docSnap) => {
-            newImages.push(docSnap.data().url);
+            const data = docSnap.data();
+            if (data.url) newImages.push(data.url);
         });
 
-        // Only restart if the images set changed
         if (JSON.stringify(newImages) !== JSON.stringify(images)) {
             images = newImages;
             currentIndex = 0;
