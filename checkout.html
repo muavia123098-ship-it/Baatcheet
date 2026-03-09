@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- No Cache: Always fetch fresh data -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <title>Checkout | BIN MAZHAR PERFUMES</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&family=Jost:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Poppins:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=3.0">
+    <link rel="stylesheet" href="checkout.css?v=3.0">
+</head>
+
+<body>
+    <!-- Simple Header for Checkout -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <div class="nav-back-btn" id="backBtn">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="logo-wrap">
+                <a href="index.html"><img src="assets/logo.png" alt="BIN MAZHAR PERFUMES" id="main-logo"></a>
+            </div>
+            <div class="nav-links" id="navLinks">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="category.html">Collections</a></li>
+                <li><a href="track-order.html">Track Order</a></li>
+                <li><a href="index.html#contact">Contact</a></li>
+            </div>
+            <div class="nav-toggle" id="navToggle">
+                <i class="fas fa-bars"></i>
+            </div>
+        </div>
+    </nav>
+
+    <main class="checkout-page container">
+        <div class="checkout-grid">
+            <!-- Block 1: Order Details -->
+            <div class="section-card order-details-box">
+                <h3 class="checkout-title"><i class="fas fa-file-invoice"></i> Order Details</h3>
+                <div id="order-summary" class="order-summary">
+                    <!-- Filled by JS -->
+                    <div class="loading-placeholder">Loading order details...</div>
+                </div>
+            </div>
+
+            <!-- Block 2: Bill Breakdown (Side on desktop, Middle on mobile) -->
+            <div class="checkout-sidebar bill-summary-box">
+                <div class="section-card sticky-sidebar">
+                    <h3 class="checkout-title">Bill Summary</h3>
+                    <div class="bill-breakdown">
+                        <div class="bill-row">
+                            <span>Subtotal</span>
+                            <strong id="subtotal">Rs 0</strong>
+                        </div>
+                        <div class="bill-row">
+                            <span>Delivery Charges (DC)</span>
+                            <strong id="delivery-charges">Rs 0</strong>
+                        </div>
+                        <div class="bill-divider"></div>
+                        <div class="bill-row total">
+                            <span>Total Amount</span>
+                            <strong id="total-amount">Rs 0</strong>
+                        </div>
+                    </div>
+                    <div class="checkout-note">
+                        <i class="fas fa-info-circle"></i>
+                        <p>Orders are processed after payment verification. Delivery charges are Rs 200 per product.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Block 3: Shipping & Payment -->
+            <div class="section-card shipping-info-box">
+                <h3 class="checkout-title"><i class="fas fa-user-edit"></i> Shipping Information</h3>
+                <form id="checkout-form" class="professional-form">
+                    <div class="form-row">
+                        <div class="input-wrap">
+                            <label>Full Name</label>
+                            <input type="text" id="custName" placeholder="Enter your full name" required>
+                        </div>
+                        <div class="input-wrap">
+                            <label>Phone Number (WhatsApp)</label>
+                            <input type="tel" id="custPhone" placeholder="03xx xxxxxxx" required>
+                        </div>
+                    </div>
+                    <div class="input-wrap">
+                        <label>Shipping Address</label>
+                        <textarea id="custAddress" rows="3" placeholder="Street, Sector, Area details"
+                            required></textarea>
+                    </div>
+                    <div class="input-wrap">
+                        <label>City</label>
+                        <input type="text" id="custCity" placeholder="Your city" required>
+                    </div>
+
+                    <div class="payment-method-section mt-2">
+                        <label class="selection-label">Select Payment Method</label>
+                        <div class="payment-options">
+                            <div class="payment-opt active" data-method="Meezan">
+                                <i class="fas fa-university"></i>
+                                <span>Meezan Bank</span>
+                            </div>
+                            <div class="payment-opt" data-method="EasyPaisa">
+                                <i class="fas fa-mobile-alt"></i>
+                                <span>EasyPaisa</span>
+                            </div>
+                            <div class="payment-opt" data-method="JazzCash">
+                                <i class="fas fa-wallet"></i>
+                                <span>JazzCash</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="payment-instructions" class="payment-instructions-card mt-2">
+                        <!-- Filled by JS based on Admin settings -->
+                        <p>Loading payment details...</p>
+                    </div>
+
+                    <div class="upload-section mt-2">
+                        <label class="selection-label">Upload Payment Screenshot</label>
+                        <div class="upload-container" id="upload-box">
+                            <input type="file" id="proof-upload" accept="image/*" hidden>
+                            <div class="upload-inner">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Tap to upload proof of payment</p>
+                                <small>(Max 5MB, JPG/PNG)</small>
+                            </div>
+                            <div id="preview-container" style="display: none;">
+                                <img id="image-preview" src="">
+                                <button type="button" id="remove-proof" class="btn-remove-proof"><i
+                                        class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="place-order-btn" class="btn-place-order" disabled>
+                        Confirm Order & Submit Proof
+                    </button>
+                </form>
+            </div>
+        </div>
+        </div>
+    </main>
+
+    <!-- Success Modal -->
+    <div id="order-success-modal" class="success-modal">
+        <div class="success-content">
+            <button class="modal-close-btn"
+                onclick="document.getElementById('order-success-modal').style.display='none'">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="success-icon"><i class="fas fa-check-circle"></i></div>
+            <h2 style="color: #1a1a1a;">Order Submitted!</h2>
+            <p style="color: #333;">Your order has been placed successfully. We will verify your payment and process it
+                shortly.</p>
+            <div class="order-id-box">Order ID: <span id="success-order-id">#000000</span></div>
+            <button id="close-success" class="btn-primary">Track Your Order</button>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script type="module" src="checkout.js?v=3.0"></script>
+</body>
+
+</html>
