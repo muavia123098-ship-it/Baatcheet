@@ -3,8 +3,8 @@
  * Replicates Firebase v9+ Modular API for easy migration.
  */
 
-const API_BASE = 'https://malikmuavia-fireclone-backend.hf.space/api';
-const SOCKET_URL = 'https://malikmuavia-fireclone-backend.hf.space';
+const API_BASE = 'http://localhost:3000/api';
+const SOCKET_URL = 'http://localhost:3000';
 
 let socket;
 let currentProjectId;
