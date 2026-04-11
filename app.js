@@ -1,1718 +1,1911 @@
-// ---------------- Initialization & Global State ----------------
-let activeChatId = null;
-let activeChatData = null;
-let chats = [];
-let presenceListener = null;
-let typingListener = null;
-let messageListener = null;
-let typingTimeout = null;
-let isCurrentlyTyping = false;
-let isSelectionMode = false;
-let selectedMessages = new Set();
-let contactsMap = new Map(); // Local cache for nicknames
-let contactsListener = null;
+const DOM = {
+    install: document.getElementById('install-screen'),
+    splash: document.getElementById('splash-screen'),
+    onboarding: document.getElementById('onboarding-screen'),
+    success: document.getElementById('success-screen'),
+    app: document.getElementById('app-screen'),
+    chatView: document.getElementById('chat-view'),
+    nameInput: document.getElementById('user-name-input'),
+    generateBtn: document.getElementById('generate-id-btn'),
+    statusMsg: document.getElementById('onboarding-status'),
+    displayId: document.getElementById('display-id'),
+    startChatBtn: document.getElementById('start-chatting-btn'),
+    myNameDisplay: document.getElementById('my-name-display'),
+    myIdDisplay: document.getElementById('my-id-display'),
+    myAvatar: document.getElementById('my-profile-pic'),
+    backBtn: document.getElementById('back-to-list'),
+    chatItemsList: document.getElementById('chat-items-list'),
+    // Avatar elements
+    avatarPreviewImg: document.getElementById('avatar-preview-img'),
+    // Settings elements
+    settingsBtn: document.getElementById('settings-btn'),
+    settingsDropdown: document.getElementById('settings-dropdown'),
+    editProfileBtn: document.getElementById('edit-profile-btn'),
+    blockListBtn: document.getElementById('block-list-btn'),
+    shareAppBtn: document.getElementById('share-app-btn'),
+    deleteAccountBtn: document.getElementById('delete-account-btn'),
+    // Modals
+    deleteModal: document.getElementById('delete-modal'),
+    cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
+    confirmDeleteBtn: document.getElementById('confirm-delete-btn'),
+    editProfileModal: document.getElementById('edit-profile-modal'),
+    editAvatarPreviewImg: document.getElementById('edit-avatar-preview-img'),
+    editNameInput: document.getElementById('edit-name-input'),
+    cancelEditBtn: document.getElementById('cancel-edit-btn'),
+    saveEditBtn: document.getElementById('save-edit-btn'),
+    editZoomSlider: document.getElementById('edit-zoom-slider'),
+    editYSlider: document.getElementById('edit-y-slider'),
+    editXSlider: document.getElementById('edit-x-slider'),
+    editGalleryBtn: document.getElementById('edit-gallery-btn'),
+    editGalleryInput: document.getElementById('edit-gallery-input'),
+    onboardingYSlider: null, // Removed
+    onboardingXSlider: null, // Removed
+    onboardingGalleryBtn: null, // Removed
+    onboardingGalleryInput: null, // Removed
+    attachBtn: document.getElementById('attach-btn'),
+    chatFileInput: document.getElementById('chat-file-input'),
+    imagePreviewArea: document.getElementById('image-preview-container'),
+    imagePreviewImg: document.getElementById('image-preview-img'),
+    closePreviewBtn: document.getElementById('close-preview-btn'),
+    // Lightbox
+    lightbox: document.getElementById('image-lightbox'),
+    lightboxImg: document.getElementById('lightbox-img'),
+    closeLightboxBtn: document.getElementById('close-lightbox'),
+    // Reply
+    replyArea: document.getElementById('reply-preview-container'),
+    replyName: document.getElementById('reply-preview-name'),
+    replyText: document.getElementById('reply-preview-text'),
+    closeReplyBtn: document.getElementById('close-reply-btn'),
+    // Delete Msg
+    msgDeleteModal: document.getElementById('delete-msg-modal'),
+    deleteEveryoneBtn: document.getElementById('delete-everyone-btn'),
+    deleteForMeBtn: document.getElementById('delete-for-me-btn'),
+    cancelMsgDelete: document.getElementById('cancel-msg-delete'),
+    // Context Menu
+    msgContextMenu: document.getElementById('msg-context-menu'),
+    ctxReplyBtn: document.getElementById('ctx-reply-btn'),
+    ctxDeleteBtn: document.getElementById('ctx-delete-btn'),
+    // Search & Add Contact
+    searchInput: document.getElementById('chat-search-input'),
+    openAddModalBtn: document.getElementById('open-add-modal-btn'),
+    addContactModal: document.getElementById('add-contact-modal'),
+    newContactIdInput: document.getElementById('new-contact-id'),
+    saveContactBtn: document.getElementById('save-contact-btn'),
+    cancelAddBtn: document.getElementById('cancel-add-btn'),
+    // Permissions
+    permissionModal: document.getElementById('permission-modal'),
+    allowNotifBtn: document.getElementById('allow-notifications-btn'),
+    skipNotifBtn: document.getElementById('skip-notifications-btn'),
+    // Voice elements
+    micBtn: document.getElementById('mic-btn'),
+    sendBtn: document.getElementById('send-btn'),
+    recordingOverlay: document.getElementById('recording-overlay'),
+    messageInput: document.getElementById('message-input'),
+    // Block Features
+    blockListBtn: document.getElementById('block-list-btn'),
+    blockListModal: document.getElementById('block-list-modal'),
+    closeBlockListBtn: document.getElementById('close-block-list-btn'),
+    blockedItemsContainer: document.getElementById('blocked-items-container'),
+    blockAlertModal: document.getElementById('block-alert-modal'),
+    contactContextMenu: document.getElementById('contact-context-menu'),
+    ctxChatDeleteBtn: document.getElementById('ctx-chat-delete-btn'),
+    ctxChatBlockBtn: document.getElementById('ctx-chat-block-btn'),
+    blockedContextMenu: document.getElementById('blocked-context-menu'),
+    ctxUnblockBtn: document.getElementById('ctx-unblock-btn'),
+    ctxBlockedDeleteBtn: document.getElementById('ctx-blocked-delete-btn')
+};
 
+let replyToMsgObj = null;
+let msgToDeleteObj = null;
 
-// DOM Cache
-let nodes = {};
+let currentUser = null;
+let mqttClient = null;
+let activeChatObj = null;
+let chatList = JSON.parse(localStorage.getItem('mchat_chatlist')) || {};
+let blockList = JSON.parse(localStorage.getItem('mchat_blocklist')) || [];
+let blockedByList = JSON.parse(localStorage.getItem('mchat_blockedBy')) || []; // Track who blocked us
+let contactToActObj = null;
+let generatedAvatarUrl = null; 
 
-function initDOMRefs() {
-    console.log("initDOMRefs: Mapping elements...");
-    nodes = {
-        chatList: document.getElementById('chat-list'),
-        chatBody: document.getElementById('chat-body'),
-        messageInput: document.getElementById('message-input'),
-        sendBtn: document.getElementById('send-btn'),
-        activeChatName: document.getElementById('active-chat-name'),
-        activeChatStatus: document.getElementById('active-chat-status'),
-        myNameDisplay: document.getElementById('my-name-display'),
-        myNumberDisplay: document.getElementById('my-number-display'),
-        backBtn: document.getElementById('back-btn'),
-        callBtn: document.getElementById('call-btn'),
-        recordingOverlay: document.getElementById('recording-overlay'),
-        recordingTimer: document.getElementById('recording-timer'),
-        stopRecordingBtn: document.getElementById('stop-recording-btn'),
-        deleteRecordingBtn: document.getElementById('delete-recording-btn'),
-        sendRecordingBtn: document.getElementById('send-recording-btn'),
-        selectionHeader: document.getElementById('selection-header'),
-        selectionCount: document.getElementById('selection-count'),
-        deleteSelectedBtn: document.getElementById('delete-selected-btn'),
-        cancelSelectionBtn: document.getElementById('cancel-selection-btn'),
-        deleteConfirmModal: document.getElementById('delete-confirm-modal'),
-        deleteModalText: document.getElementById('delete-modal-text'),
-        deleteForEveryoneBtn: document.getElementById('delete-for-everyone-btn'),
-        deleteForMeBtn: document.getElementById('delete-for-me-btn'),
-        cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
-        emojiBtn: document.getElementById('emoji-btn'),
-        emojiPicker: document.getElementById('emoji-picker'),
-        chatMenuBtn: document.getElementById('chat-menu-btn'),
-        chatMenu: document.getElementById('chat-menu'),
-        clearChatMenu: document.getElementById('clear-chat-menu'),
-        blockContactMenu: document.getElementById('block-contact-menu'),
-        contactProfileMenu: document.getElementById('contact-profile-menu'),
-        clearChatModal: document.getElementById('clear-chat-modal'),
-        blockContactModal: document.getElementById('block-contact-modal'),
-        confirmClearChatBtn: document.getElementById('confirm-clear-chat-btn'),
-        cancelClearChatBtn: document.getElementById('cancel-clear-chat-btn'),
-        confirmBlockBtn: document.getElementById('confirm-block-btn'),
-        cancelBlockBtn: document.getElementById('cancel-block-btn'),
-        deleteContactMenu: document.getElementById('delete-contact-menu'),
-        deleteContactModal: document.getElementById('delete-contact-modal'),
-        confirmDeleteContactBtn: document.getElementById('confirm-delete-contact-btn'),
-        cancelDeleteContactBtn: document.getElementById('cancel-delete-contact-btn'),
-        attachBtn: document.getElementById('attach-btn'),
-        fileInput: document.getElementById('file-input')
-    };
+let deferredPrompt = null;
 
-    // Attach local listeners with high priority
-    if (nodes.messageInput) {
-        const handleInput = () => {
-            // Typing indicator logic
-            if (!isCurrentlyTyping) {
-                isCurrentlyTyping = true;
-                setTypingStatus(true);
-            }
-
-            if (typingTimeout) clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                isCurrentlyTyping = false;
-                setTypingStatus(false);
-            }, 3000);
-
-            // Update icon
-            updateSendBtnIcon();
-        };
-        nodes.messageInput.onkeyup = (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-                isCurrentlyTyping = false;
-                setTypingStatus(false);
-                if (typingTimeout) clearTimeout(typingTimeout);
-            }
-            handleInput();
-        };
-        nodes.messageInput.oninput = handleInput;
-        nodes.messageInput.onkeydown = handleInput;
-        nodes.messageInput.onpaste = handleInput;
-        nodes.messageInput.onblur = () => {
-            isCurrentlyTyping = false;
-            setTypingStatus(false);
-        };
-    }
-    if (nodes.sendBtn) {
-        nodes.sendBtn.onclick = sendMessage;
-    }
-
-    if (nodes.attachBtn) {
-        nodes.attachBtn.onclick = () => {
-            if (nodes.fileInput) nodes.fileInput.click();
-        };
-    }
-
-    if (nodes.fileInput) {
-        nodes.fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) handleFileSelect(file);
-            // Reset input so the same file can be selected again if needed
-            e.target.value = '';
-        };
-    }
-    if (nodes.backBtn) nodes.backBtn.onclick = closeChat;
-
-    // Call Listener
-    if (nodes.callBtn) {
-        nodes.callBtn.onclick = () => {
-            if (activeChatData) {
-                const other = getOtherParticipant(activeChatData);
-                if (other && other.uid) startCall(other.uid, false);
-            }
-        };
-    }
-    if (document.getElementById('video-call-btn')) {
-        document.getElementById('video-call-btn').onclick = () => {
-            if (activeChatData) {
-                const other = getOtherParticipant(activeChatData);
-                if (other && other.uid) startCall(other.uid, true);
-            }
-        };
-    }
-
-    // Voice Recording Listeners (Removed)
-    if (nodes.chatBody) {
-        nodes.chatBody.onclick = (e) => {
-            if (!isSelectionMode) return;
-            const msgDiv = e.target.closest('.message');
-            if (msgDiv && msgDiv.dataset.id) {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleMessageSelection(msgDiv.dataset.id, msgDiv);
-            }
-        };
-    }
-
-    // Selection/Delete Listeners
-    if (nodes.cancelSelectionBtn) nodes.cancelSelectionBtn.onclick = exitSelectionMode;
-    if (nodes.deleteSelectedBtn) nodes.deleteSelectedBtn.onclick = showDeleteModal;
-    if (nodes.cancelDeleteBtn) nodes.cancelDeleteBtn.onclick = closeDeleteModal;
-    if (nodes.deleteForMeBtn) nodes.deleteForMeBtn.onclick = confirmDeleteForMe;
-    if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.onclick = confirmDeleteForEveryone;
-
-    initEmojiPicker();
-
-    // Chat Menu Dropdown Logic
-    if (nodes.chatMenuBtn) {
-        nodes.chatMenuBtn.onclick = (e) => {
-            e.stopPropagation();
-            if (nodes.chatMenu) nodes.chatMenu.classList.toggle('hidden');
-        };
-    }
-
-    // Modal Cancel Listeners
-    if (nodes.cancelClearChatBtn) nodes.cancelClearChatBtn.onclick = () => nodes.clearChatModal.classList.add('hidden');
-    if (nodes.cancelBlockBtn) nodes.cancelBlockBtn.onclick = () => nodes.blockContactModal.classList.add('hidden');
-
-    // Close menus on click outside
-    document.addEventListener('click', () => {
-        if (nodes.chatMenu) nodes.chatMenu.classList.add('hidden');
-        if (document.getElementById('main-menu')) document.getElementById('main-menu').classList.add('hidden');
-    });
-
-    // Chat Actions
-    if (nodes.clearChatMenu) nodes.clearChatMenu.onclick = () => {
-        nodes.clearChatModal.classList.remove('hidden');
-        nodes.chatMenu.classList.add('hidden');
-    };
-    if (nodes.blockContactMenu) nodes.blockContactMenu.onclick = () => {
-        nodes.blockContactModal.classList.remove('hidden');
-        nodes.chatMenu.classList.add('hidden');
-    };
-    if (nodes.contactProfileMenu) nodes.contactProfileMenu.onclick = () => {
-        openContactProfile();
-        nodes.chatMenu.classList.add('hidden');
-    };
-
-    if (nodes.confirmClearChatBtn) nodes.confirmClearChatBtn.onclick = clearChat;
-    if (nodes.confirmBlockBtn) nodes.confirmBlockBtn.onclick = confirmBlockContact;
-
-    if (nodes.deleteContactMenu) {
-        nodes.deleteContactMenu.onclick = () => {
-            if (nodes.deleteContactModal) nodes.deleteContactModal.classList.remove('hidden');
-            if (nodes.chatMenu) nodes.chatMenu.classList.add('hidden');
-        };
-    }
-    if (nodes.cancelDeleteContactBtn) {
-        nodes.cancelDeleteContactBtn.onclick = () => {
-            if (nodes.deleteContactModal) nodes.deleteContactModal.classList.add('hidden');
-        };
-    }
-    if (nodes.confirmDeleteContactBtn) nodes.confirmDeleteContactBtn.onclick = confirmDeleteContact;
-
-}
-
-function updateSendBtnIcon() {
-    if (!nodes.messageInput || !nodes.sendBtn) return;
-    const icon = nodes.sendBtn.querySelector('i');
-    if (!icon) return;
-
-    if (nodes.messageInput.value.trim() !== '') {
-        icon.className = 'fas fa-paper-plane';
+async function initApp() {
+    console.log("Initializing M-Chat (Universal Inbox Architecture)...");
+    
+    // Check if app is already running in "Native" standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    
+    if (isStandalone) {
+        startBootFlow();
     } else {
-        icon.className = 'fas fa-microphone';
+        // Force the install screen - no more skipping
+        showScreen('install');
     }
 }
 
-function updateHeaderUI() {
-    const uData = window.userData;
-    if (uData) {
-        if (nodes.myNameDisplay) nodes.myNameDisplay.innerText = uData.name || 'User';
-        if (nodes.myNumberDisplay) nodes.myNumberDisplay.innerText = uData.baatcheetNumber || '';
+// Global binding for the skip button
+document.addEventListener('DOMContentLoaded', () => {
+    // skip-install listener removed to enforce mandatory installation
+});
+
+// Separate boot flow for cleaner logic
+async function startBootFlow() {
+    showScreen('splash');
+    
+    // Safety Valve: If app sticks on splash for >5s, force move
+    const safetyValve = setTimeout(() => {
+        if (DOM.splash.classList.contains('active')) {
+            console.warn("Safety valve triggered: forcing boot...");
+            finalizeBoot();
+        }
+    }, 5000);
+
+    const splashDelay = new Promise(res => setTimeout(res, 800)); // Shorter delay
+    await splashDelay;
+    
+    try {
+        finalizeBoot();
+    } catch (err) {
+        console.error("Boot failure:", err);
+        showScreen('onboarding'); // Fallback
     }
+    clearTimeout(safetyValve);
 }
 
-// Global Initialization
-window.auth.onAuthStateChanged(user => {
-    initDOMRefs();
-    if (user) {
-        console.log("App Init: Auth confirmed for", user.uid);
-        // Wait briefly for firestore-config to sync latest window.userData
-        setTimeout(() => {
-            updateHeaderUI();
-            listenForChats(user.uid);
-            listenForContacts(user.uid); // Sync nicknames
-            listenForCalls(user.uid);
-            managePresence(); // Start presence management
-
-            // Link to OneSignal for background signaling
-            if (window.OneSignalDeferred) {
-                OneSignalDeferred.push(async function (OneSignal) {
-                    console.log("[OneSignal] Logging in External ID:", user.uid);
-                    await OneSignal.login(user.uid);
-                });
-            }
-
-            // Midnight cleanup check
-            checkAndRunDailyCleanup();
-            // Check permissions after login
-            checkAllPermissions();
-            // Check every hour just in case they keep the tab open overnight
-            setInterval(checkAndRunDailyCleanup, 60 * 60 * 1000);
-        }, 500);
+function finalizeBoot() {
+    const localData = localStorage.getItem('mchat_currentUser');
+    if (localData) {
+        try {
+            currentUser = JSON.parse(localData);
+            if (!currentUser || !currentUser.id || !currentUser.name) throw new Error("Invalid user data");
+            loadMainApp();
+        } catch(e) {
+            console.error("Local data corrupted or app failure:", e);
+            localStorage.removeItem('mchat_currentUser'); // Clear bad data
+            showScreen('onboarding');
+        }
     } else {
-        console.warn("App Init: No user, auth-config should redirect...");
+        showScreen('onboarding');
+    }
+}
+
+// Handle PWA Install Prompt
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show install screen if we were waiting for it
+    if (!window.matchMedia('(display-mode: standalone)').matches) {
+       showScreen('install');
     }
 });
 
-// 1. Listen for Conversations (Chat List)
-function listenForChats(authUid) {
-    const uid = authUid || (window.userData ? window.userData.uid : null);
-    if (!uid) {
-        console.error("Cannot listen for chats: No user UID found.");
+document.getElementById('pwa-install-btn').onclick = async () => {
+    if (!deferredPrompt) {
+        alert("Installation is already in progress or not supported by this browser. Check your browser menu/address bar.");
         return;
     }
-    console.log("Listening for chats for user UID:", uid);
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+        startBootFlow();
+    }
+    deferredPrompt = null;
+};
 
-    // We remove .orderBy to avoid requiring a composite index immediately.
-    // Sorting will be done in memory.
-    window.db.collection('conversations')
-        .where('participants', 'array-contains', uid)
-        .onSnapshot(snapshot => {
-            console.log("Chat Snapshot received. Docs count:", snapshot.docs.length);
-            chats = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+// --- Screen Switching Logic ---
 
-            // Sort in memory by lastUpdate
-            chats.sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
+function showScreen(screenName) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    
+    if (screenName === 'install') DOM.install.classList.add('active');
+    if (screenName === 'splash') DOM.splash.classList.add('active');
+    if (screenName === 'onboarding') DOM.onboarding.classList.add('active');
+    if (screenName === 'success') DOM.success.classList.add('active');
+    if (screenName === 'app') DOM.app.classList.add('active');
+}
 
-            console.log("Chats array updated and sorted:", chats);
+function createLetterAvatar(name) {
+    if (!name) name = "?";
+    const firstLetter = name.charAt(0).toUpperCase();
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    const ctx = canvas.getContext('2d');
+    
+    // Consistent color based on name
+    const colors = ['#4fb087', '#4a90e2', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c', '#f1c40f', '#e67e22', '#34495e'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const color = colors[Math.abs(hash) % colors.length];
+    
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(50, 50, 50, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 50px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(firstLetter, 50, 52); // Slight offset for visual balance
+    
+    return canvas.toDataURL();
+}
 
-            // Sync activeChatData if the current active chat was updated
-            if (activeChatId) {
-                const currentChat = chats.find(c => c.id === activeChatId);
-                if (currentChat) {
-                    activeChatData = currentChat;
-                    // Update header UI (for block status etc.)
-                    const other = getOtherParticipant(currentChat);
-                    if (nodes.activeChatName) nodes.activeChatName.innerText = contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown';
 
-                    // Update menu UI block status
-                    const myUid = window.userData ? window.userData.uid : null;
-                    if (nodes.blockContactMenu) {
-                        if (currentChat.blockedBy && myUid && currentChat.blockedBy[myUid]) {
-                            nodes.blockContactMenu.innerText = "Unblock Contact";
-                            nodes.blockContactMenu.style.color = "var(--text-primary)";
-                        } else {
-                            nodes.blockContactMenu.innerText = "Block Contact";
-                            nodes.blockContactMenu.style.color = "var(--primary-red)";
+// --- Account Generation ---
+
+DOM.generateBtn.addEventListener('click', async () => {
+    const name = DOM.nameInput.value.trim();
+    if (!name) {
+        DOM.statusMsg.innerText = "Please enter your name first.";
+        return;
+    }
+
+    DOM.generateBtn.disabled = true;
+    DOM.generateBtn.innerText = "Generating...";
+    DOM.statusMsg.innerText = "Generating secure ID...";
+
+    const avatar = createLetterAvatar(name);
+    
+    const random6 = Math.floor(100000 + Math.random() * 900000);
+    const uniqueIdString = "0200" + random6.toString();
+    
+    currentUser = {
+        id: uniqueIdString,
+        name: name,
+        avatar: avatar,
+        createdAt: new Date().toISOString()
+    };
+
+    localStorage.setItem('mchat_currentUser', JSON.stringify(currentUser));
+    
+    DOM.displayId.innerText = uniqueIdString;
+    showScreen('success');
+});
+
+DOM.startChatBtn.addEventListener('click', () => {
+    loadMainApp();
+});
+
+
+// --- Main App & MQTT Logic ---
+
+function loadMainApp() {
+    try {
+        if (!currentUser) return showScreen('onboarding');
+
+        // Header
+        DOM.myNameDisplay.innerText = currentUser.name;
+        DOM.myIdDisplay.innerText = "ID: " + currentUser.id;
+        DOM.myAvatar.src = createLetterAvatar(currentUser.name);
+        DOM.myAvatar.style.transform = `none`;
+
+        showScreen('app');
+        
+        initMQTT();
+        
+        // Setup UI bindings once
+        const addBtn = document.getElementById('add-friend-btn');
+        if (addBtn && !addBtn.dataset.bound) {
+            addBtn.addEventListener('click', startNewChat);
+            addBtn.dataset.bound = "true";
+        }
+        renderChatList();
+    } catch (err) {
+        console.error("Main app load error:", err);
+        showScreen('onboarding');
+    }
+}
+
+function initMQTT() {
+    if (typeof mqtt === 'undefined') {
+        console.warn("MQTT library not loaded yet. Retrying in 1s...");
+        setTimeout(initMQTT, 1000);
+        return;
+    }
+
+    const clientId = 'mchat_' + currentUser.id + '_' + Math.random().toString(16).substr(2, 4);
+    // Correct port for WSS on HiveMQ is 8884
+    const host = 'wss://broker.hivemq.com:8884/mqtt'; 
+    
+    console.log("Connecting to HiveMQ Broker (WSS)...");
+    mqttClient = mqtt.connect(host, {
+        clientId: clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 2000,
+        // Last Will: If we disconnect, others see us as offline with a timestamp
+        will: {
+            topic: `mchat/status/${currentUser.id}`,
+            payload: JSON.stringify({ status: "offline", lastSeen: Date.now() }),
+            qos: 1,
+            retain: true
+        }
+    });
+
+    mqttClient.on('connect', () => {
+        console.log('Connected to MQTT. Setting up Universal Inbox, Directory, and Status.');
+        
+        // Update presence to Online (Retained)
+        updateStatus("online");
+        
+        // 1. Publish our presence to the Global Directory with "Retain"
+        // This ensures anyone searching for our ID finds our profile instantly
+        const profileStr = JSON.stringify({
+            id: currentUser.id,
+            name: currentUser.name,
+            avatar: currentUser.avatar,
+            avatarZoom: currentUser.avatarZoom || 1.7,
+            avatarX: currentUser.avatarX || 0,
+            avatarY: currentUser.avatarY || 0
+        });
+        mqttClient.publish(`mchat/directory/${currentUser.id}`, profileStr, { retain: true });
+
+        // 2. Subscribe to our Personal Inbox to receive messages anywhere
+        mqttClient.subscribe(`mchat/inbox/${currentUser.id}`, { qos: 1 });
+
+        // 3. Dynamic Profile Sync: Subscribe to all friends' directory topics
+        // This ensures we have their latest name/avatar even if we were offline
+        Object.keys(chatList).forEach(friendId => {
+            mqttClient.subscribe(`mchat/directory/${friendId}`);
+        });
+    });
+
+    mqttClient.on('message', (topic, message) => {
+        try {
+            const raw = message.toString();
+
+            // 1. Handle Global Directory Updates (Retained Messages)
+            if (topic.startsWith('mchat/directory/')) {
+                const friendId = topic.split('/').pop();
+                if (friendId === currentUser.id) return;
+
+                if (!raw || raw === "" || raw === "null") {
+                    // Account was deleted!
+                    if (chatList[friendId]) {
+                        chatList[friendId].deleted = true;
+                        chatList[friendId].lastMessage = "This account is deleted";
+                        saveChatList();
+                        renderChatList();
+                        
+                        // If currently chatting with them, Close it
+                        if (activeChatObj && activeChatObj.id === friendId) {
+                            alert("This account has been deleted.");
+                            DOM.backBtn.click();
                         }
                     }
+                    return;
+                }
+
+                const payload = JSON.parse(raw);
+                if (chatList[friendId] && payload && payload.name) {
+                    console.log(`Syncing profile for ${friendId}...`);
+                    chatList[friendId].deleted = false; 
+                    updateChatList(payload.id, payload.name, payload.avatar, undefined, payload.avatarZoom, payload.avatarX, payload.avatarY);
+                    
+                    // Live update header if chatting
+                    if (activeChatObj && activeChatObj.id === friendId) {
+                        document.getElementById('active-chat-name').innerText = payload.name;
+                        const mini = document.getElementById('active-chat-avatar');
+                        mini.src = payload.avatar || createLetterAvatar(payload.name);
+                        mini.style.transform = `none`;
+                    }
+                }
+                return;
+            }
+
+            // 2. Handle Other Messages
+            const payload = JSON.parse(raw);
+            
+            // Handle Inbox Messages
+            if (topic === `mchat/inbox/${currentUser.id}`) {
+                // Ignore system messages from our own handleInboxMessage if they match
+                if (payload.type === "VOICE_LISTENED") {
+                    const roomId = getChatRoomId(currentUser.id, payload.senderId);
+                    removeSingleMessageLocally(roomId, payload.msgId);
+                    if (activeChatObj && activeChatObj.id === payload.senderId) {
+                        renderLocalMessages();
+                        appendSystemMessage("Recipient has listened to your voice message.");
+                    }
+                    return;
+                }
+
+                if (payload.type === "DELETE_SINGLE_MSG") {
+                    const roomId = getChatRoomId(currentUser.id, payload.friendId);
+                    removeSingleMessageLocally(roomId, payload.msgId);
+                    if (activeChatObj && activeChatObj.id === payload.friendId) {
+                        renderLocalMessages();
+                    }
+                    return;
+                }
+                
+                // If the message is a block reject signal
+                if (payload.type === "YOU_ARE_BLOCKED") {
+                    if (payload.blockerId && !blockedByList.includes(payload.blockerId)) {
+                        blockedByList.push(payload.blockerId);
+                        localStorage.setItem('mchat_blockedBy', JSON.stringify(blockedByList));
+                    }
+                    DOM.blockAlertModal.style.display = 'flex';
+                    return;
+                }
+                
+                // If the sender is in our block list, reject it silently and send YOU_ARE_BLOCKED back
+                if (blockList.includes(payload.senderId)) {
+                    if (payload.msgId && !payload.type) { 
+                        const rejectPayload = { type: "YOU_ARE_BLOCKED", blockerId: currentUser.id };
+                        mqttClient.publish(`mchat/inbox/${payload.senderId}`, JSON.stringify(rejectPayload), {qos: 1});
+                    }
+                    return;
+                }
+
+                // If we receive a message from someone, it means we are NOT blocked by them (or they unblocked us)
+                if (payload.senderId && blockedByList.includes(payload.senderId)) {
+                    blockedByList = blockedByList.filter(id => id !== payload.senderId);
+                    localStorage.setItem('mchat_blockedBy', JSON.stringify(blockedByList));
+                }
+
+                handleInboxMessage(payload);
+            }
+            
+            // Handle Status Updates
+            if (topic.startsWith('mchat/status/') && activeChatObj) {
+                const friendId = topic.split('/').pop();
+                if (friendId === activeChatObj.id) {
+                    updateStatusUI(payload);
                 }
             }
 
-            renderChatList();
-        }, error => {
-            console.error("Chat Listener Error:", error);
-            if (error.message.includes("index")) {
-                console.warn("INDEX ERROR: Please create the index via the link in the console to enable server-side sorting.");
+            // --- Real-time Auto-Delete Logic ---
+            
+            // Handle READ_RECEIPT: If our messages were seen, delete them
+            // Handle MESSAGES_SEEN: Friend has read our messages
+            if (payload.type === "MESSAGES_SEEN") {
+                const roomId = getChatRoomId(currentUser.id, payload.senderId);
+                let stored = localStorage.getItem(roomId);
+                if (stored) {
+                    let msgs = JSON.parse(stored);
+                    let changed = false;
+                    msgs.forEach(m => {
+                        if (m.senderId === currentUser.id && m.status !== "seen") {
+                            m.status = "seen";
+                            m.seenAt = Date.now();
+                            changed = true;
+                        }
+                    });
+                    if (changed) {
+                        localStorage.setItem(roomId, JSON.stringify(msgs));
+                        if (activeChatObj && activeChatObj.id === payload.senderId) {
+                            renderLocalMessages();
+                        }
+                    }
+                }
+                return;
             }
-        });
+
+            // Handle CHAT_CLOSED_DELETE: Legacy signal - no longer needed with 24h system but kept for catch-all
+            // Actually, we should probably remove it to follow the 24h requirement strictly
+            if (payload.type === "CHAT_CLOSED_DELETE") {
+                return;
+            }
+        } catch (e) {
+            console.error("Message error:", e);
+        }
+    });
 }
 
-function listenForContacts(uid) {
-    if (!uid) return;
-    if (contactsListener) contactsListener();
-    console.log("Listening for private contacts...");
-    contactsListener = window.db.collection('users').doc(uid).collection('contacts')
-        .onSnapshot(snapshot => {
-            snapshot.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.uid) contactsMap.set(data.uid, data);
-            });
-            console.log("Contacts map synced:", contactsMap.size, "records.");
-            renderChatList(); // Re-render to apply nicknames
-        });
+function getChatRoomId(id1, id2) {
+    return "mchat_room_" + [id1, id2].sort().join('_');
 }
 
-function renderChatList(filter = '') {
-    if (!nodes.chatList) return;
-    console.log("Rendering Chat List. Total chats:", chats.length, "Filter:", filter);
-    nodes.chatList.innerHTML = '';
 
-    const filteredChats = chats
-        .filter(chat => {
-            const otherParticipant = getOtherParticipant(chat);
-            const nameToSearch = (otherParticipant.nickname || otherParticipant.name || 'Unknown').toLowerCase();
-            return nameToSearch.includes(filter.toLowerCase());
-        })
-        .sort((a, b) => (b.lastUpdate?.seconds || 0) - (a.lastUpdate?.seconds || 0));
+// --- Chat List & Inbox Utilities ---
 
-    if (chats.length === 0) {
-        nodes.chatList.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: var(--text-secondary);">
-                <p>Aapka chat list khaali hai.</p>
-                <small style="color:var(--primary-red)">Tip: 'Add Contact' menu se kisi ko add karein.</small>
-            </div>`;
-        return;
+function updateChatList(id, name, avatar, lastText) {
+    if (!id) return;
+    if (!chatList[id]) {
+        chatList[id] = { id, name, avatar, lastMessage: "", timestamp: Date.now() };
+    }
+    // Always overwrite with newest info if provided (avoid undefined)
+    if (name) {
+        chatList[id].name = name;
+        chatList[id].avatar = avatar || createLetterAvatar(name);
+    }
+    
+    if (lastText !== undefined) {
+        chatList[id].lastMessage = lastText;
+        chatList[id].timestamp = Date.now();
+    }
+    
+    localStorage.setItem('mchat_chatlist', JSON.stringify(chatList));
+    renderChatList();
+}
+
+function renderChatList(filter = "") {
+    const container = document.getElementById('chat-items-list');
+    container.innerHTML = "";
+    
+    let ordered = Object.values(chatList).sort((a,b) => b.timestamp - a.timestamp);
+    
+    if (filter) {
+        ordered = ordered.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()) || c.id.includes(filter));
     }
 
-    if (filteredChats.length === 0) {
-        nodes.chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--primary-red); font-weight: bold;">No contacts match your filter.</div>';
+    // Filter out blocked contacts from chat list
+    ordered = ordered.filter(c => !blockList.includes(c.id));
+
+    if (ordered.length === 0) {
+        container.innerHTML = `<p style="text-align:center; padding:20px; color:#aaa;">${filter ? "No contacts found." : "No chats yet. Click + to add a friend!"}</p>`;
         return;
     }
-
-    filteredChats.forEach(chat => {
-        const other = getOtherParticipant(chat);
+    
+    ordered.forEach(c => {
+        const isDeleted = c.deleted === true;
         const div = document.createElement('div');
-        div.className = `chat-item ${activeChatId === chat.id ? 'active' : ''}`;
-        div.onclick = () => selectChat(chat);
+        div.className = 'chat-item ripple';
+        if (isDeleted) div.style.opacity = '0.6';
 
-        const time = chat.lastUpdate ? new Date(chat.lastUpdate.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
-
-        const unreadKey = `unread_${userData.uid}`;
-        const hasUnread = chat[unreadKey] === true;
-
-        // Typing status in list
-        const isOtherTyping = chat[`typing_${other.uid}`];
-        const lastMsgText = isOtherTyping ? '<span class="typing-indicator-text">Typing...</span>' : (chat.lastMessage || 'Start a conversation');
-
+        div.onclick = () => {
+            if (isDeleted) {
+                alert("This account has been deleted.");
+                return;
+            }
+            c.unread = 0; // Clear unread on open
+            saveChatList();
+            openChatView(c.name, c.id, c.avatar, c.avatarZoom, c.avatarX, c.avatarY);
+        };
+        
+        const timeStr = new Date(c.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true});
+        const unreadBadge = (c.unread > 0 && !isDeleted) ? `<span class="unread-count">${c.unread}</span>` : "";
+        
         div.innerHTML = `
-            <div class="chat-item-info" style="margin-left: 0;">
-                <div class="chat-item-top">
-                    <div>
-                        <span class="chat-item-name">${contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown'}</span>
-                        ${hasUnread ? '<span class="unread-dot"></span>' : ''}
-                    </div>
-                    <span class="chat-item-time">${time}</span>
+            <div class="avatar-box">
+                <img src="${c.avatar || createLetterAvatar(c.name)}" alt="${c.name}" style="${isDeleted ? 'filter: grayscale(1); opacity: 0.5;' : ''}">
+            </div>
+            <div class="chat-info">
+                <div class="chat-top">
+                    <span class="chat-name">${c.name} ${isDeleted ? "<span style='font-size:0.8rem; color:red; margin-left:5px;'>(Account Deleted)</span>" : ""}</span>
+                    <span class="chat-time">${timeStr}</span>
                 </div>
-                <div class="chat-item-msg">${lastMsgText}</div>
+                <div class="chat-bottom">
+                    <span class="chat-preview">${isDeleted ? "This account is deleted" : c.lastMessage}</span>
+                    ${unreadBadge}
+                </div>
             </div>
         `;
-        nodes.chatList.appendChild(div);
+
+        // Context Menu Handlers (Right click & Long Press)
+        div.oncontextmenu = (e) => {
+            e.preventDefault();
+            openContactContextMenu(e, c);
+        };
+        initLongPress(div, c, openContactContextMenu);
+
+        container.appendChild(div);
     });
 }
 
-// Helper to get the other person in the chat
-function getOtherParticipant(chat) {
-    const userData = window.userData;
-    if (chat && chat.participantsData && userData && userData.uid) {
-        // Find the participant that is NOT me
-        const other = chat.participantsData.find(p => p.uid !== userData.uid);
-        if (other) return other;
-    }
-    // Fallback logic
-    if (chat && chat.participantsData && chat.participantsData.length > 0) {
-        return chat.participantsData[0];
-    }
-    return { name: 'Unknown', photoURL: '' };
+function openContactContextMenu(e, contactObj) {
+    e.preventDefault();
+    contactToActObj = contactObj;
+    
+    const x = e.clientX || (e.touches && e.touches[0].clientX) || window.innerWidth / 2;
+    const y = e.clientY || (e.touches && e.touches[0].clientY) || window.innerHeight / 2;
+    
+    DOM.contactContextMenu.style.display = 'block';
+    DOM.blockedContextMenu.style.display = 'none'; // Hide other
+    
+    const rect = DOM.contactContextMenu.getBoundingClientRect();
+    let finalX = x; let finalY = y;
+    if (x + rect.width > window.innerWidth) finalX = window.innerWidth - rect.width - 10;
+    if (y + rect.height > window.innerHeight) finalY = window.innerHeight - rect.height - 10;
+    
+    DOM.contactContextMenu.style.left = finalX + 'px';
+    DOM.contactContextMenu.style.top = finalY + 'px';
+    
+    if (window.navigator.vibrate) window.navigator.vibrate(20);
 }
 
-// 3. Select Chat
-function selectChat(chat) {
-    const userData = window.userData;
-    activeChatId = chat.id;
-    activeChatData = chat;
+// Global dismiss for context menus
+document.addEventListener('click', (e) => {
+    if (DOM.contactContextMenu && DOM.contactContextMenu.style.display === 'block') DOM.contactContextMenu.style.display = 'none';
+    if (DOM.blockedContextMenu && DOM.blockedContextMenu.style.display === 'block') DOM.blockedContextMenu.style.display = 'none';
+});
 
-    const other = getOtherParticipant(chat);
-    if (nodes.activeChatName) nodes.activeChatName.innerText = contactsMap.get(other.uid)?.name || other.nickname || other.name || 'Unknown';
-
-    // Listen for other person's presence
-    listenForOtherPresence(other.uid);
-
-    // Show Chat UI components
-    if (nodes.callBtn) nodes.callBtn.style.display = 'block';
-    if (document.getElementById('video-call-btn')) document.getElementById('video-call-btn').style.display = 'block';
-
-    const chatFooter = document.querySelector('.chat-footer');
-    if (chatFooter) chatFooter.style.display = 'flex';
-
-    // Hide welcome message or empty state help
-    if (nodes.chatBody) {
-        nodes.chatBody.classList.remove('hidden');
-        nodes.chatBody.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-secondary);">Loading messages...</div>';
-    }
-
-    // Mobile View Toggle
-    const sidebar = document.querySelector('.sidebar');
-    const mainChat = document.querySelector('.main-chat');
-    if (sidebar) sidebar.classList.add('hide-mobile');
-    if (mainChat) mainChat.classList.add('show-mobile');
-
-    renderChatList();
-    listenForMessages();
-    // Mark incoming messages as read when chat is opened
-    markMessagesAsRead(chat.id);
-    // Cleanup any already expired messages for this chat
-    cleanupExpiredMessages(chat.id);
-
-    // --- Block UI Update ---
-    const myUid = window.userData ? window.userData.uid : null;
-    if (nodes.blockContactMenu) {
-        if (chat.blockedBy && myUid && chat.blockedBy[myUid]) {
-            nodes.blockContactMenu.innerText = "Unblock Contact";
-            nodes.blockContactMenu.style.color = "var(--text-primary)";
-        } else {
-            nodes.blockContactMenu.innerText = "Block Contact";
-            nodes.blockContactMenu.style.color = "var(--primary-red)";
-        }
-    }
-}
-
-// Close Chat (Back to contacts or blank state)
-function closeChat() {
-    activeChatId = null;
-    activeChatData = null;
-
-    // Stop message listener
-    if (messageListener) {
-        messageListener();
-        messageListener = null;
-    }
-
-    // Reset UI
-    if (nodes.activeChatName) nodes.activeChatName.innerText = 'Select a chat';
-    if (nodes.activeChatStatus) nodes.activeChatStatus.innerText = '';
-    if (nodes.chatBody) nodes.chatBody.innerHTML = '';
-
-    // Unsubscribe presence listener
-    if (presenceListener) {
-        presenceListener();
-        presenceListener = null;
-    }
-    if (typingListener) {
-        typingListener();
-        typingListener = null;
-    }
-
-    if (nodes.callBtn) nodes.callBtn.style.display = 'none';
-    if (document.getElementById('video-call-btn')) document.getElementById('video-call-btn').style.display = 'none';
-
-    const chatFooter = document.querySelector('.chat-footer');
-    if (chatFooter) chatFooter.style.display = 'none';
-
-    // Toggle Mobile view back
-    const sidebar = document.querySelector('.sidebar');
-    const mainChat = document.querySelector('.main-chat');
-    if (sidebar) sidebar.classList.remove('hide-mobile');
-    if (mainChat) mainChat.classList.remove('show-mobile');
-
-    if (typeof exitSelectionMode === 'function') exitSelectionMode();
-    renderChatList();
-}
-
-// Helper functions for presence
-function managePresence() {
-    const userData = window.userData;
-    if (!userData || !userData.uid) return;
-
-    const userRef = window.db.collection('users').doc(userData.uid);
-
-    const updateStatus = (status) => {
-        userRef.update({
-            status: status,
-            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-        }).catch(err => console.warn("Presence update failed:", err));
-    };
-
-    // Set online on load
-    updateStatus('online');
-
-    // Heartbeat: Update 'lastSeen' every 1 minute to keep 'Online' active
-    const heartbeat = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-            updateStatus('online');
-        }
-    }, 60000);
-
-    // Set offline on disconnect (tab close)
-    window.addEventListener('beforeunload', () => {
-        clearInterval(heartbeat);
-        // Note: update might not finish in beforeunload on some browsers
-        // so we also rely on visibilitychange and server-side timeouts if we had them.
-        updateStatus('offline');
-    });
-
-    // Handle visibility change (tab background/foreground)
-    document.addEventListener('visibilitychange', () => {
-        const isVisible = document.visibilityState === 'visible';
-        updateStatus(isVisible ? 'online' : 'away');
-    });
-}
-
-function listenForOtherPresence(otherUid) {
-    if (!nodes.activeChatStatus) return;
-    if (presenceListener) presenceListener();
-    if (typingListener) typingListener();
-
-    let lastPresenceText = 'Offline';
-
-    presenceListener = window.db.collection('users').doc(otherUid)
-        .onSnapshot(doc => {
-            const data = doc.data();
-            if (data) {
-                if (data.status === 'online') {
-                    lastPresenceText = 'Online';
-                } else if (data.status === 'away') {
-                    lastPresenceText = 'Away';
-                } else if (data.lastSeen) {
-                    const lastSeenDate = new Date(data.lastSeen.seconds * 1000);
-                    const timeStr = lastSeenDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                    lastPresenceText = `Last seen at ${timeStr}`;
-                } else {
-                    lastPresenceText = 'Offline';
-                }
-
-                // If not showing typing, update text
-                if (nodes.activeChatStatus.innerText !== 'Typing...') {
-                    nodes.activeChatStatus.innerText = lastPresenceText;
-                    nodes.activeChatStatus.style.color = (data.status === 'online' || data.status === 'away') ? '#43c966' : 'var(--text-secondary)';
-                }
-            }
-        });
-
-    typingListener = window.db.collection('conversations').doc(activeChatId)
-        .onSnapshot(doc => {
-            const data = doc.data();
-            if (data && otherUid) {
-                const isOtherTyping = data[`typing_${otherUid}`];
-                if (isOtherTyping) {
-                    nodes.activeChatStatus.innerText = 'Typing...';
-                    nodes.activeChatStatus.style.color = '#43c966';
-                } else {
-                    nodes.activeChatStatus.innerText = lastPresenceText;
-                    nodes.activeChatStatus.style.color = 'var(--text-secondary)';
-                }
-            }
-        });
-}
-
-function setTypingStatus(isTyping) {
-    if (!activeChatId || !window.userData) return;
-    window.db.collection('conversations').doc(activeChatId).update({
-        [`typing_${window.userData.uid}`]: isTyping
-    }).catch(err => console.warn("Typing status update failed:", err));
-}
-
-// Mark all unread messages from the other person as read
-async function markMessagesAsRead(chatId) {
-    const userData = window.userData;
-    if (!userData) return;
-    try {
-        // Inequality filters on multiple fields require an index.
-        // We avoid it by only filtering 'read' and checking senderId in JS.
-        const unreadSnap = await window.db.collection('conversations').doc(chatId)
-            .collection('messages')
-            .where('read', '==', false)
-            .get();
-
-        const batch = window.db.batch();
-        let count = 0;
-        const expiryTime = Date.now() + (60 * 60 * 1000); // 1 hour from now
-
-        unreadSnap.docs.forEach(doc => {
-            const msg = doc.data();
-            // Important: We only mark as read messages sent by others
-            if (msg.senderId !== userData.uid) {
-                batch.update(doc.ref, {
-                    read: true,
-                    expiryAt: expiryTime
-                });
-                count++;
-            }
-        });
-
-        // Also: Look for messages that ARE read but missing expiryAt (for some reason)
-        // This ensures old read messages also get a cleanup timer eventually
-        const readMissingExpiry = await window.db.collection('conversations').doc(chatId)
-            .collection('messages')
-            .where('read', '==', true)
-            .get();
-
-        readMissingExpiry.docs.forEach(doc => {
-            const msg = doc.data();
-            if (!msg.expiryAt) {
-                batch.update(doc.ref, { expiryAt: expiryTime });
-                count++;
-            }
-        });
-
-        // Clear unread flag for me
-        const convRef = window.db.collection('conversations').doc(chatId);
-        batch.update(convRef, { [`unread_${userData.uid}`]: false });
-
-        if (count > 0 || unreadSnap.size > 0) {
-            await batch.commit();
-            // Schedule a one-time cleanup for exactly 1 hour from now
-            // so messages are deleted as soon as they expire
-            setTimeout(() => {
-                cleanupExpiredMessages(chatId);
-            }, 60 * 60 * 1000 + 5000); // 1 hour + 5 sec buffer
-            console.log(`markMessagesAsRead: ${count} messages marked. Auto-delete scheduled in 1 hour.`);
-        }
-    } catch (e) {
-        console.warn('markMessagesAsRead error:', e.message);
-    }
-}
-
-window.onload = () => {
-    initDOMRefs();
-    const searchInput = document.getElementById('chat-search');
-    if (searchInput) {
-        searchInput.oninput = (e) => renderChatList(e.target.value);
+// Contact Context Actions
+if(DOM.ctxChatDeleteBtn) DOM.ctxChatDeleteBtn.onclick = () => {
+    DOM.contactContextMenu.style.display = 'none';
+    if (contactToActObj) {
+        delete chatList[contactToActObj.id];
+        saveChatList();
+        renderChatList();
     }
 };
 
-// Notification Permissions
-async function requestNotificationPermission() {
-    if (!('Notification' in window)) {
-        alert("Aapka browser notifications support nahi karta (Not supported).");
-        return;
-    }
-
-    try {
-        // Show current state for debugging
-        if (Notification.permission === 'denied') {
-            alert("Notifications pehle se Block hain. Browser settings mein ja kar 'Reset Permission' ya 'Allow' karein.");
+if(DOM.ctxChatBlockBtn) DOM.ctxChatBlockBtn.onclick = () => {
+    DOM.contactContextMenu.style.display = 'none';
+    if (contactToActObj) {
+        if (!blockList.includes(contactToActObj.id)) {
+            blockList.push(contactToActObj.id);
+            saveBlockList();
         }
-
-        const permission = await Notification.requestPermission();
-
-        if (permission === 'granted') {
-            alert("Notification Permission: ALLOWED (Shukriya!)");
-        } else if (permission === 'denied') {
-            alert("Notification Permission: DENIED (Block). Please change in settings.");
-        }
-    } catch (err) {
-        alert("Notification Error: " + err.message);
-    }
-}
-
-// Profile Editing Logic
-// These might be declared in contacts.js, so we use them directly or from window.
-(function () {
-    const pModal = document.getElementById('profile-modal');
-    const pHeader = pModal ? pModal.querySelector('.modal-header h3') : null;
-    const eProfileName = document.getElementById('edit-profile-name');
-    const sProfileBtn = document.getElementById('save-profile-btn');
-    const cProfileClose = document.getElementById('close-profile-modal');
-
-    // Store context: 'self' or 'contact'
-    let profileContext = 'self';
-    let currentContact = null;
-
-    window.openProfileModal = function () {
-        profileContext = 'self';
-        currentContact = null;
-        if (pHeader) pHeader.innerText = "Edit Profile";
-        const uData = window.userData;
-        if (!uData) return;
-        if (eProfileName) eProfileName.value = uData.name || "";
-        if (pModal) pModal.classList.remove('hidden');
-    };
-
-    window.openContactProfileModal = function (contact) {
-        profileContext = 'contact';
-        currentContact = contact;
-        if (pHeader) pHeader.innerText = "Contact Profile";
-        if (eProfileName) eProfileName.value = contact.name || "";
-        if (pModal) pModal.classList.remove('hidden');
-    };
-
-    if (cProfileClose) {
-        cProfileClose.onclick = () => {
-            if (pModal) pModal.classList.add('hidden');
-            profileContext = 'self';
-            currentContact = null;
-        };
-    }
-
-    window.saveProfile = async function () {
-        const uData = window.userData;
-        if (!eProfileName || !sProfileBtn || !uData) return;
-        const newName = eProfileName.value.trim();
-
-        if (!newName) {
-            alert("Pehle naam enter karein!");
-            return;
-        }
-
-        try {
-            sProfileBtn.innerText = "Saving...";
-            sProfileBtn.disabled = true;
-
-            if (profileContext === 'self') {
-                // Update OWN profile
-                await db.collection('users').doc(uData.uid).update({ name: newName });
-                uData.name = newName;
-                localStorage.setItem('baatcheet_user', JSON.stringify(uData));
-                const nameDisp = document.getElementById('my-name-display');
-                if (nameDisp) nameDisp.innerText = newName;
-                console.log("Personal profile updated.");
-            } else {
-                // Update CONTACT nickname
-                if (currentContact) {
-                    const contactRef = db.collection('users')
-                        .doc(uData.uid)
-                        .collection('contacts')
-                        .doc(currentContact.uid);
-
-                    await contactRef.set({
-                        uid: currentContact.uid,
-                        name: newName,
-                        baatcheetNumber: currentContact.baatcheetNumber || ''
-                    }, { merge: true });
-                    console.log("Contact nickname saved/updated.");
-                    renderChatList();
-                }
-            }
-
-            alert("Saved successfully!");
-            if (pModal) pModal.classList.add('hidden');
-        } catch (error) {
-            console.error("Error saving profile:", error);
-            alert("Update fail: " + error.message);
-        } finally {
-            sProfileBtn.innerText = "Save Changes";
-            sProfileBtn.disabled = false;
-        }
-    };
-
-    if (sProfileBtn) {
-        sProfileBtn.onclick = window.saveProfile;
-    }
-})();
-
-// Show Background Notification
-function showCallNotification(callerName) {
-    if (Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.showNotification('Baatcheet Incoming Call', {
-                body: `${callerName} is calling you...`,
-                icon: 'logo.png',
-                tag: 'incoming-call',
-                renotify: true,
-                requireInteraction: true,
-                vibrate: [200, 100, 200],
-                actions: [
-                    { action: 'accept', title: '✅ Accept' },
-                    { action: 'decline', title: '❌ Decline' }
-                ]
-            });
-        });
-    }
-}
-
-// 4. Listen for Messages
-function listenForMessages() {
-    console.log("listenForMessages: Starting listener for", activeChatId);
-    if (messageListener) messageListener(); // Unsubscribe previous
-
-    messageListener = window.db.collection('conversations')
-        .doc(activeChatId)
-        .collection('messages')
-        .orderBy('timestamp', 'asc')
-        .onSnapshot({ includeMetadataChanges: true }, snapshot => {
-            const userData = window.userData;
-            console.log(`Messages Snapshot from ${snapshot.metadata.fromCache ? 'cache' : 'server'}: ${snapshot.size} messages`);
-            if (nodes.chatBody) {
-                nodes.chatBody.innerHTML = '';
-                // Visible Debug Message
-                const debugDiv = document.createElement('div');
-                debugDiv.style = "font-size:10px; color:var(--text-secondary); text-align:center; padding:5px; opacity:0.5;";
-                debugDiv.innerText = `Snapshot Sync: ${snapshot.size} messages (${snapshot.metadata.fromCache ? 'cache' : 'server'})`;
-                nodes.chatBody.appendChild(debugDiv);
-            }
-
-            snapshot.docs.forEach((doc, idx) => {
-                const msgId = doc.id;
-                try {
-                    const msg = doc.data();
-                    const msgType = msg.type || 'text';
-                    console.log(`[Msg ${idx + 1}/${snapshot.size}] ID: ${msgId}, Type: ${msgType}`);
-
-                    // Skip if deleted for this user
-                    if (msg.deletedFor && userData && userData.uid && msg.deletedFor.includes(userData.uid)) {
-                        return;
-                    }
-
-                    // Clear Chat Filter: Skip if message is older than the last "Clear Chat" time for this user
-                    if (activeChatData && activeChatData.clearedAt && userData && userData.uid) {
-                        const myClearTime = activeChatData.clearedAt[userData.uid];
-                        if (myClearTime && msg.timestamp) {
-                            const clearTs = myClearTime.toDate ? myClearTime.toDate().getTime() : myClearTime;
-                            const msgTs = msg.timestamp.toDate ? msg.timestamp.toDate().getTime() : (msg.timestamp.seconds * 1000);
-                            if (msgTs <= clearTs) return;
-                        }
-                    }
-
-                    const isSent = userData && msg.senderId === userData.uid;
-                    const div = document.createElement('div');
-                    div.id = `msg-${msgId}`;
-                    div.dataset.id = msgId;
-
-                    // --- Interaction Handlers ---
-                    // Desktop Right-Click
-                    div.oncontextmenu = (e) => {
-                        e.preventDefault();
-                        showDirectDeleteModal(msgId, isSent);
-                    };
-
-                    // Mobile Long-Press
-                    div.ontouchstart = (e) => {
-                        longPressTimeout = setTimeout(() => {
-                            showDirectDeleteModal(msgId, isSent);
-                        }, 600);
-                    };
-
-                    div.ontouchend = () => clearTimeout(longPressTimeout);
-                    div.ontouchmove = () => clearTimeout(longPressTimeout);
-                    div.onclick = null;
-
-                    // Special rendering for Call Logs
-                    if (msg.type === 'call') {
-                        div.className = `message call-log`;
-                        let iconClass = 'fa-phone';
-                        let iconColor = '#8696a0'; // Default
-                        let callText = msg.text || 'Voice Call';
-
-                        // Debugging info
-                        console.log(`Rendering Call Log [${msgId}]:`, {
-                            callerId: msg.callerId,
-                            myUid: userData ? userData.uid : 'null',
-                            status: msg.callStatus
-                        });
-
-                        if (msg.callerId) {
-                            const isICalled = msg.callerId === userData.uid;
-                            const isIMissed = msg.callStatus === 'missed';
-
-                            if (isIMissed) {
-                                iconClass = 'fa-phone-slash';
-                                iconColor = '#f15c6d'; // Missed Red
-                                callText = isICalled ? 'Missed Voice Call (Outgoing)' : 'Missed Voice Call (Incoming)';
-                            } else {
-                                iconColor = '#34B7F1'; // Answered Blue
-                                callText = isICalled ? 'Outgoing Voice Call' : 'Incoming Voice Call';
-                            }
-                        } else if (msg.text) {
-                            // Fallback for legacy logs
-                            if (msg.text.toLowerCase().includes('missed')) {
-                                iconClass = 'fa-phone-slash';
-                                iconColor = '#f15c6d';
-                            } else {
-                                iconColor = '#34B7F1';
-                            }
-                        }
-
-                        const timeStr = msg.timestamp
-                            ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                            : '';
-                        const durationStr = msg.duration ? ` (${formatDuration(msg.duration)})` : '';
-                        div.innerHTML = `<i class="fas ${iconClass}" style="color:${iconColor}; margin-right:8px;"></i> ${callText}${durationStr} <small style="margin-left:8px; opacity:0.6">${timeStr}</small>`;
-                        if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                        return;
-                    }
-
-                    // Special rendering for Voice Messages
-                    if (msg.type === 'audio') {
-                        div.className = `message ${isSent ? 'sent' : 'received'} audio-msg`;
-                        const timeStr = msg.timestamp
-                            ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                            : '...';
-
-                        let tickHtml = '';
-                        if (isSent) {
-                            tickHtml = msg.read
-                                ? `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`
-                                : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
-                        }
-
-                        div.innerHTML = `
-                        <div class="audio-player">
-                            <i class="fas fa-play play-btn" onclick="this.nextElementSibling.paused ? (this.nextElementSibling.play(), this.classList.replace('fa-play', 'fa-pause')) : (this.nextElementSibling.pause(), this.classList.replace('fa-pause', 'fa-play'))"></i>
-                            <audio src="${msg.audioUrl}" onended="this.previousElementSibling.classList.replace('fa-pause', 'fa-play')"></audio>
-                            <div class="audio-waveform">
-                                <div class="mic-icon-circle">
-                                    <i class="fas fa-microphone"></i>
-                                </div>
-                                <div class="audio-dummy-bar"></div>
-                            </div>
-                        </div>
-                        <div class="msg-time">${timeStr}${tickHtml}</div>
-                    `;
-                        if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                        return;
-                    }
-
-                    // Special rendering for File Messages (Generic)
-                    if (msg.type === 'file') {
-                        div.className = `message ${isSent ? 'sent' : 'received'} file-msg`;
-                        const timeStr = msg.timestamp
-                            ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                            : '...';
-
-                        let tickHtml = '';
-                        if (isSent) {
-                            tickHtml = msg.read
-                                ? `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;"></i>`
-                                : '<i class="fas fa-check" style="color:#8696a0;margin-left:5px;"></i>';
-                        }
-
-                        // Simplified file view: Icon, Name, Size, Download Link
-                        const fileSize = msg.fileSize ? (msg.fileSize / 1024).toFixed(1) + ' KB' : 'Unknown size';
-                        div.innerHTML = `
-                        <div style="display: flex; align-items: center; gap: 12px; padding: 5px 0;">
-                            <div style="width: 40px; height: 40px; background: rgba(0,0,0,0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                                <i class="fas fa-file-alt"></i>
-                            </div>
-                            <div style="flex: 1; overflow: hidden;">
-                                <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${msg.fileName || 'Document'}</div>
-                                <div style="font-size: 11px; opacity: 0.7;">${fileSize}</div>
-                            </div>
-                            <a href="${msg.fileUrl}" target="_blank" download="${msg.fileName}" style="color: inherit; font-size: 18px; padding: 5px;">
-                                <i class="fas fa-download"></i>
-                            </a>
-                        </div>
-                        <div class="msg-time">${timeStr}${tickHtml}</div>
-                    `;
-                        if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                        return;
-                    }
-
-                    div.className = `message ${isSent ? 'sent' : 'received'}`;
-
-                    let timeStr = '...';
-                    if (msg.timestamp) {
-                        try {
-                            const date = msg.timestamp.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp.seconds * 1000);
-                            timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                        } catch (e) { timeStr = '...'; }
-                    }
-
-                    // Tick logic:
-                    //   No tick        = received message (not mine)
-                    //   Single grey ✓  = sent, not yet read
-                    //   Double blue ✓✓ = sent & read by recipient
-                    let tickHtml = '';
-                    if (isSent) {
-                        if (msg.read === true) {
-                            tickHtml = `<i class="fas fa-check-double" style="color:#34B7F1;margin-left:5px;" title="Read"></i>`;
-                        } else {
-                            tickHtml = `<i class="fas fa-check" style="color:#8696a0;margin-left:5px;" title="Delivered"></i>`;
-                        }
-                    }
-
-                    div.innerHTML = `
-                    ${msg.text}
-                    <div class="msg-time">${timeStr}${tickHtml}</div>
-                `;
-                    if (nodes.chatBody) nodes.chatBody.appendChild(div);
-                    console.log(`- Rendered ${msgId} successfully.`);
-                } catch (err) {
-                    console.error(`- Error rendering ${doc.id}:`, err);
-                }
-            });
-            if (nodes.chatBody) nodes.chatBody.scrollTop = nodes.chatBody.scrollHeight;
-            console.log(`listenForMessages: Finished rendering ${snapshot.size} messages.`);
-
-            // Auto-mark incoming as read while the chat is open
-            if (activeChatId) {
-                markMessagesAsRead(activeChatId);
-            }
-        }, error => {
-            console.error("Messages Listener Error:", error);
-            if (nodes.chatBody) {
-                nodes.chatBody.innerHTML = `<div style="padding:20px; text-align:center; color:var(--primary-red);">
-                    Error loading messages: ${error.message}
-                </div>`;
-            }
-        });
-}
-
-// 4.5 Send Push Notification via OneSignal REST API
-async function sendMsgPush(receiverId, senderName, text) {
-    try {
-        console.log(`[sendMsgPush] Notifying ${receiverId}...`);
-        await fetch("https://onesignal.com/api/v1/notifications", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json; charset=utf-8",
-                "Authorization": `Basic ${ONESIGNAL_REST_KEY}`
-            },
-            body: JSON.stringify({
-                app_id: ONESIGNAL_APP_ID,
-                include_external_user_ids: [receiverId],
-                contents: { "en": text },
-                headings: { "en": senderName },
-                chrome_web_icon: "https://baatcheet-pi.vercel.app/logo.png",
-                data: { type: "message", senderId: (window.userData && window.userData.uid) || auth.currentUser.uid },
-                android_accent_color: "128C7E",
-                priority: 10
-            })
-        });
-    } catch (e) { console.error("[sendMsgPush] Fail:", e); }
-}
-
-// 5. Send Message
-async function sendMessage() {
-    if (!activeChatId) return;
-
-    // Block Check
-    if (activeChatData && activeChatData.blockedBy) {
-        const blockerIds = Object.keys(activeChatData.blockedBy);
-        if (blockerIds.length > 0) {
-            alert("This chat is blocked. You cannot send messages.");
-            return;
-        }
-    }
-
-    console.log("SENDING MESSAGE: Initializing...", { activeChatId, hasInput: !!nodes.messageInput });
-
-    const mInput = nodes.messageInput || document.getElementById('message-input');
-    if (!mInput) return;
-
-    const text = mInput.value.trim();
-    if (!text) {
-        console.log("Empty message, ignoring.");
-        return;
-    }
-
-    console.log("Sending message text:", text);
-    const uData = window.userData;
-
-    // Clear input immediately for responsiveness
-    mInput.value = '';
-    if (typeof updateSendBtnIcon === 'function') updateSendBtnIcon();
-
-    try {
-        // Firebase send (purana tareeka - hum isay rakhte hain history ke liye filhaal)
-        await window.db.collection('conversations').doc(activeChatId).collection('messages').add({
-            text: text,
-            senderId: uData.uid,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-            read: false
-        });
-
-        // Naya tareeka: Socket se real-time bhejba
-        const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
-        if (other && other.uid && typeof window.sendSocketMessage === 'function') {
-            window.sendSocketMessage(other.uid, text);
-            console.log("Socket se message bhej diya!");
-        }
-
-        const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
-        const updateData = {
-            lastMessage: text,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        if (other && other.uid) {
-            updateData[`unread_${other.uid}`] = true;
-        }
-
-        await window.db.collection('conversations').doc(activeChatId).update(updateData);
-        console.log("Message sent successfully!");
-
-        // Send Push if app is likely background/closed for receiver
-        if (other && other.uid) {
-            sendMsgPush(other.uid, uData.name || "Baatcheet User", text);
-        }
-    } catch (e) {
-        console.error("Error sending message:", e);
-        alert("Pesh aaney wala masla (Sending failed): " + e.message);
-    }
-}
-
-// --- File Selection & Upload Logic ---
-async function handleFileSelect(file) {
-    if (!activeChatId) return;
-
-    // Optional: Size limit check (e.g., 20MB)
-    if (file.size > 20 * 1024 * 1024) {
-        alert("File bohat badi hai! (Max 20MB allowed)");
-        return;
-    }
-
-    console.log("File selected:", file.name, file.size);
-
-    // Show a temporary loading indicator if possible, or just log
-    // For now, let's just proceed with upload
-    try {
-        const url = await uploadFileToStorage(file);
-        if (url) {
-            await sendFileMessage(url, file.name, file.type, file.size);
-        }
-    } catch (err) {
-        console.error("File processing failed:", err);
-        alert("File bhejne mein masla hua: " + err.message);
-    }
-}
-
-async function uploadFileToStorage(file) {
-    if (!window.storage) {
-        console.error("Firebase Storage not initialized!");
-        return null;
-    }
-
-    const storageRef = window.storage.ref();
-    const fileName = `${Date.now()}_${file.name}`;
-    const fileRef = storageRef.child(`chat_attachments/${activeChatId}/${fileName}`);
-
-    console.log("Uploading to:", fileRef.fullPath);
-
-    const snapshot = await fileRef.put(file);
-    const downloadURL = await snapshot.ref.getDownloadURL();
-    console.log("File uploaded, URL:", downloadURL);
-    return downloadURL;
-}
-
-async function sendFileMessage(url, name, type, size) {
-    const uData = window.userData;
-    const msgData = {
-        type: 'file',
-        fileUrl: url,
-        fileName: name,
-        fileType: type,
-        fileSize: size,
-        senderId: uData.uid,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        read: false,
-        text: `📁 ${name}` // Text fallback for notifications and list
-    };
-
-    try {
-        await window.db.collection('conversations').doc(activeChatId).collection('messages').add(msgData);
-
-        const other = getOtherParticipant(chats.find(c => c.id === activeChatId));
-        const updateData = {
-            lastMessage: `📁 ${name}`,
-            lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        if (other && other.uid) {
-            updateData[`unread_${other.uid}`] = true;
-        }
-
-        await window.db.collection('conversations').doc(activeChatId).update(updateData);
-
-        if (other && other.uid) {
-            sendMsgPush(other.uid, uData.name || "Baatcheet User", `📁 ${name}`);
-        }
-        console.log("File message sent successfully!");
-    } catch (e) {
-        console.error("Error sending file message:", e);
-        throw e;
-    }
-}
-
-// UI Handlers (updateSendBtnIcon removed)
-
-// --- Emoji Picker Logic ---
-function initEmojiPicker() {
-    if (nodes.emojiBtn && nodes.emojiPicker) {
-        nodes.emojiBtn.onclick = (e) => {
-            e.stopPropagation();
-            nodes.emojiPicker.classList.toggle('hidden');
-        };
-
-        // Close picker when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!nodes.emojiPicker.contains(e.target) && e.target !== nodes.emojiBtn) {
-                nodes.emojiPicker.classList.add('hidden');
-            }
-        });
-
-        // Handle emoji click
-        const emojis = document.querySelectorAll('.emoji');
-        emojis.forEach(emoji => {
-            emoji.onclick = () => {
-                const mInput = nodes.messageInput || document.getElementById('message-input');
-                if (mInput) {
-                    mInput.value += emoji.innerText;
-                    mInput.focus();
-                }
-            };
-        });
-    }
-}
-
-function formatDuration(seconds) {
-    if (!seconds) return "";
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins > 0) {
-        return `${mins}m ${secs}s`;
-    }
-    return `${secs}s`;
-}
-
-// Voice Recording Logic Removed
-
-// --- Message Selection & Deletion Functions ---
-// Elements are now in nodes cache
-
-// Direct delete modal (no red screen — shows modal immediately on long press)
-function showDirectDeleteModal(msgId, isMine) {
-    // Clear previous selection and set this one message
-    selectedMessages.clear();
-    selectedMessages.add(msgId);
-
-    if (nodes.deleteModalText) {
-        nodes.deleteModalText.innerText = "Delete this message?";
-    }
-
-    // Show "Delete for Everyone" only for own messages
-    if (nodes.deleteForEveryoneBtn) {
-        if (isMine) {
-            nodes.deleteForEveryoneBtn.classList.remove('hidden');
-        } else {
-            nodes.deleteForEveryoneBtn.classList.add('hidden');
-        }
-    }
-
-    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.remove('hidden');
-}
-
-function enterSelectionMode(msgId, element) {
-    isSelectionMode = true;
-    document.body.classList.add('selection-active');
-    if (nodes.selectionHeader) nodes.selectionHeader.classList.remove('hidden');
-    toggleMessageSelection(msgId, element);
-}
-
-function toggleMessageSelection(msgId, element) {
-    if (selectedMessages.has(msgId)) {
-        selectedMessages.delete(msgId);
-        element.classList.remove('selected');
-    } else {
-        selectedMessages.add(msgId);
-        element.classList.add('selected');
-    }
-
-    const count = selectedMessages.size;
-    if (count === 0) {
-        exitSelectionMode();
-    } else {
-        if (nodes.selectionCount) nodes.selectionCount.innerText = count;
-    }
-}
-
-function exitSelectionMode() {
-    isSelectionMode = false;
-    document.body.classList.remove('selection-active');
-    selectedMessages.clear();
-    if (nodes.selectionHeader) nodes.selectionHeader.classList.add('hidden');
-    // Remove highlight from all messages
-    document.querySelectorAll('.message.selected').forEach(el => el.classList.remove('selected'));
-}
-
-function showDeleteModal() {
-    if (selectedMessages.size === 0) return;
-
-    if (nodes.deleteModalText) {
-        nodes.deleteModalText.innerText = selectedMessages.size === 1
-            ? "Delete message?"
-            : `Delete ${selectedMessages.size} messages?`;
-    }
-
-    // WhatsApp logic: only show "Delete for everyone" if all selected messages were sent by the user
-    let allMine = true;
-    selectedMessages.forEach(msgId => {
-        const msgDiv = document.getElementById(`msg-${msgId}`);
-        if (msgDiv && msgDiv.classList.contains('received')) {
-            allMine = false;
-        }
-    });
-
-    if (allMine) {
-        if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.classList.remove('hidden');
-    } else {
-        if (nodes.deleteForEveryoneBtn) nodes.deleteForEveryoneBtn.classList.add('hidden');
-    }
-
-    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.remove('hidden');
-}
-
-async function confirmDeleteForMe() {
-    if (!activeChatId) return;
-    try {
-        const batch = db.batch();
-        const convRef = db.collection('conversations').doc(activeChatId).collection('messages');
-
-        selectedMessages.forEach(msgId => {
-            batch.update(convRef.doc(msgId), {
-                deletedFor: firebase.firestore.FieldValue.arrayUnion(window.userData.uid)
-            });
-        });
-
-        await batch.commit();
-        closeDeleteModal();
-        exitSelectionMode();
-    } catch (err) {
-        console.error("Delete for me failed:", err);
-        alert("Delete nahi ho saka!");
-    }
-}
-
-async function confirmDeleteForEveryone() {
-    if (!activeChatId) return;
-    try {
-        const batch = db.batch();
-        const convRef = db.collection('conversations').doc(activeChatId).collection('messages');
-
-        selectedMessages.forEach(msgId => {
-            // Option A: Genuine Delete
-            batch.delete(convRef.doc(msgId));
-
-            // Option B: Mark as deleted (like WhatsApp)
-            // batch.update(convRef.doc(msgId), {
-            //     type: 'deleted',
-            //     text: '🚫 This message was deleted',
-            //     deletedAt: firebase.firestore.FieldValue.serverTimestamp()
-            // });
-        });
-
-        await batch.commit();
-        closeDeleteModal();
-        exitSelectionMode();
-    } catch (err) {
-        console.error("Delete for everyone failed:", err);
-        alert("Delete for everyone nakam raha!");
-    }
-}
-
-function closeDeleteModal() {
-    if (nodes.deleteConfirmModal) nodes.deleteConfirmModal.classList.add('hidden');
-}
-
-// --- Midnight Cleanup Logic ---
-async function checkAndRunDailyCleanup() {
-    if (!window.userData) return;
-
-    const lastCleanupKey = `lastCleanupDate_${window.userData.uid}`;
-    const lastCleanupDate = localStorage.getItem(lastCleanupKey);
-    const now = new Date();
-
-    // Format: YYYY-MM-DD
-    const todayStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
-
-    console.log(`Checking daily cleanup... Last: ${lastCleanupDate}, Today: ${todayStr}`);
-
-    if (lastCleanupDate !== todayStr) {
-        console.log("Midnight passed or new day. Running chat cleanup...");
-        await deleteAllChatsLocallyAndRemotely();
-        localStorage.setItem(lastCleanupKey, todayStr);
-    }
-}
-
-async function deleteAllChatsLocallyAndRemotely() {
-    if (!chats || chats.length === 0) {
-        console.log("No chats to clean up.");
-        return;
-    }
-
-    try {
-        console.log(`Attempting to delete ${chats.length} active conversations...`);
-
-        for (const chat of chats) {
-            const convRef = window.db.collection('conversations').doc(chat.id);
-            const msgsRef = convRef.collection('messages');
-
-            // 1. Delete all messages in the subcollection
-            const msgsSnapshot = await msgsRef.get();
-            if (!msgsSnapshot.empty) {
-                const batch = window.db.batch();
-                msgsSnapshot.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
-                await batch.commit();
-                console.log(`Deleted ${msgsSnapshot.size} messages from chat ${chat.id}`);
-            }
-
-            // 2. Delete the conversation document itself
-            await convRef.delete();
-            console.log(`Deleted conversation document ${chat.id}`);
-        }
-
-        // 3. Clear local state and UI
-        chats = [];
-        activeChatId = null;
-        activeChatData = null;
         renderChatList();
-        closeChat();
-
-        console.log("Daily chat cleanup completed successfully.");
-    } catch (err) {
-        console.error("Failed to run daily chat cleanup:", err);
     }
+};
+
+function saveBlockList() {
+    localStorage.setItem('mchat_blocklist', JSON.stringify(blockList));
 }
 
-// --- Hourly Auto-Delete Logic ---
-async function cleanupExpiredMessages(chatId) {
-    if (!chatId) return;
-    const now = Date.now();
-    try {
-        const expiredSnap = await window.db.collection('conversations')
-            .doc(chatId)
-            .collection('messages')
-            .where('expiryAt', '<=', now)
-            .get();
-
-        if (!expiredSnap.empty) {
-            console.log(`Cleanup: Found ${expiredSnap.size} expired messages in chat ${chatId}. Deleting...`);
-            const batch = window.db.batch();
-            expiredSnap.docs.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-        }
-    } catch (err) {
-        console.warn(`Cleanup failed for chat ${chatId}:`, err.message);
-    }
+function saveChatList() {
+    localStorage.setItem('mchat_chatlist', JSON.stringify(chatList));
 }
 
-async function runGlobalCleanupSweep() {
-    if (!chats || chats.length === 0) return;
-    console.log("Running Global Expiry Sweep...");
-    for (const chat of chats) {
-        await cleanupExpiredMessages(chat.id);
-    }
-}
+// Directory Search & Friend Adding
+function startNewChat() {
+    const friendId = DOM.newContactIdInput.value.trim();
+    if(friendId.length < 5 || friendId === currentUser.id) return alert("Invalid ID");
+    
+    DOM.saveContactBtn.innerText = "Checking...";
+    DOM.saveContactBtn.disabled = true;
 
-// Start Expiry Sweep (every 5 minutes)
-setInterval(runGlobalCleanupSweep, 5 * 60 * 1000);
+    // We verify by subscribing to their directory topic
+    const directoryTopic = `mchat/directory/${friendId}`;
+    let found = false;
 
-// --- PWA Installation Logic ---
-let deferredPrompt;
-const installBtn = document.getElementById('install-app-btn');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Prevent the mini-infobar from appearing on mobile
-    e.preventDefault();
-    // Stash the event so it can be triggered later.
-    deferredPrompt = e;
-    // Update UI notify the user they can install the PWA
-    if (installBtn) installBtn.classList.remove('hidden');
-    console.log("PWA: Install prompt stashed.");
-});
-
-if (installBtn) {
-    installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        // Show the install prompt
-        deferredPrompt.prompt();
-        // Wait for the user to respond to the prompt
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`PWA: User response to the install prompt: ${outcome}`);
-        // We've used the prompt, and can't use it again, throw it away
-        deferredPrompt = null;
-        // Hide the install button
-        installBtn.classList.add('hidden');
-    });
-}
-
-window.addEventListener('appinstalled', (event) => {
-    console.log('PWA: App installed successfully.');
-    if (installBtn) installBtn.classList.add('hidden');
-});
-
-// Redundant listeners removed (handled in initDOMRefs)
-
-document.getElementById('chat-search').oninput = (e) => renderChatList(e.target.value);
-
-// Listen for Service Worker messages (e.g., from Notification actions)
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'DECLINE_CALL') {
-            if (typeof endCall === 'function') {
-                endCall();
+    // Temporary listener to catch the retained directory message
+    const directoryListener = (topic, message) => {
+        if (topic === directoryTopic) {
+            found = true;
+            const raw = message.toString();
+            if (!raw || raw === "" || raw === "null") {
+                mqttClient.unsubscribe(directoryTopic);
+                mqttClient.removeListener('message', directoryListener);
+                alert("This account has been deleted.");
+                DOM.saveContactBtn.innerText = "Save Contact";
+                DOM.saveContactBtn.disabled = false;
+                return;
             }
-        }
-    });
-}
-
-// Initializers at the bottom should be careful
-// Redundant top-level listenForChats() call as it's handled in onAuthStateChanged
-
-// Redundant mainCallBtn attachment removed (handled in initDOMRefs)
-// --- Chat Header Menu Actions ---
-
-async function clearChat() {
-    if (!activeChatId) return;
-    nodes.clearChatModal.classList.add('hidden');
-
-    const myUid = window.userData ? window.userData.uid : null;
-    if (!myUid) return;
-
-    try {
-        const convRef = window.db.collection('conversations').doc(activeChatId);
-
-        // Update the clearedAt timestamp for the current user in the conversation document
-        const updateData = {};
-        updateData[`clearedAt.${myUid}`] = firebase.firestore.FieldValue.serverTimestamp();
-
-        await convRef.update(updateData);
-
-        console.log("Chat cleared for current user.");
-
-        // Update local state to trigger a re-render/filter immediately if possible
-        if (!activeChatData.clearedAt) activeChatData.clearedAt = {};
-        activeChatData.clearedAt[myUid] = Date.now(); // Temporary local timestamp
-
-        // Re-listen for messages to apply filter
-        listenForMessages();
-    } catch (err) {
-        console.error("Failed to clear chat:", err);
-        alert("Chat clear nahi ho saka!");
-    }
-}
-
-async function confirmBlockContact() {
-    if (!activeChatId || !window.userData) return;
-    nodes.blockContactModal.classList.add('hidden');
-
-    const myUid = window.userData.uid;
-    const convRef = window.db.collection('conversations').doc(activeChatId);
-
-    try {
-        const isBlocked = activeChatData.blockedBy && activeChatData.blockedBy[myUid];
-        const updateData = {};
-
-        if (isBlocked) {
-            updateData[`blockedBy.${myUid}`] = firebase.firestore.FieldValue.delete();
-            await convRef.update(updateData);
-            alert("Contact unblocked successfully.");
-        } else {
-            updateData[`blockedBy.${myUid}`] = true;
-            await convRef.update(updateData);
-            alert("Contact blocked successfully.");
-        }
-
-        // Update local state and UI
-        if (activeChatData.blockedBy) {
-            if (isBlocked) delete activeChatData.blockedBy[myUid];
-            else activeChatData.blockedBy[myUid] = true;
-        } else if (!isBlocked) {
-            activeChatData.blockedBy = { [myUid]: true };
-        }
-        selectChat(activeChatData);
-
-    } catch (err) {
-        console.error("Failed to toggle block status:", err);
-    }
-}
-
-async function confirmDeleteContact() {
-    if (!activeChatId || !activeChatData) return;
-    const other = getOtherParticipant(activeChatData);
-    const myUid = window.userData ? window.userData.uid : null;
-
-    try {
-        if (nodes.confirmDeleteContactBtn) {
-            nodes.confirmDeleteContactBtn.innerText = "Deleting...";
-            nodes.confirmDeleteContactBtn.disabled = true;
-        }
-
-        // 1. Delete conversation document (Removes it for both participants)
-        await window.db.collection('conversations').doc(activeChatId).delete();
-        console.log("Conversation document deleted:", activeChatId);
-
-        // 2. Delete nickname from private contacts if it exists
-        if (myUid && other.uid) {
-            await window.db.collection('users').doc(myUid).collection('contacts').doc(other.uid).delete();
-            console.log("Private contact record deleted for UID:", other.uid);
-            contactsMap.delete(other.uid);
-        }
-
-        // 3. UI Cleanup
-        if (nodes.deleteContactModal) nodes.deleteContactModal.classList.add('hidden');
-        closeChat(); // Go back to empty state
-        renderChatList();
-
-        alert("Contact deleted successfully from both sides.");
-
-    } catch (err) {
-        console.error("Failed to delete contact:", err);
-        alert("Deletion failed: " + err.message);
-    } finally {
-        if (nodes.confirmDeleteContactBtn) {
-            nodes.confirmDeleteContactBtn.innerText = "Delete for Both";
-            nodes.confirmDeleteContactBtn.disabled = false;
-        }
-    }
-}
-
-function openContactProfile() {
-    if (!activeChatData) return;
-    const otherUser = getOtherParticipant(activeChatData);
-    if (!otherUser) return;
-
-    // Use the unified profile modal logic
-    const pModal = document.getElementById('profile-modal');
-    const eProfileName = document.getElementById('edit-profile-name');
-    const pHeader = pModal ? pModal.querySelector('.modal-header h3') : null;
-
-    if (pModal && eProfileName) {
-        if (pHeader) pHeader.innerText = "Contact Profile";
-
-        // Scope variables from profile editing closure
-        // (Wait, app.js logic needs access to 'profileContext' and 'currentContact')
-        // I will re-implement this inside the closure or make them global-ish.
-
-        // Actually, let's just use the existing closure-friendly vars
-        window.openContactProfileModal(otherUser);
-    }
-}
-// --- Permission Management ---
-async function checkAllPermissions() {
-    // Already granted once before? Never show again.
-    const alreadyDone = localStorage.getItem('baatcheet_permissions_granted');
-    if (alreadyDone === 'true') return;
-
-    const modal = document.getElementById('permission-modal');
-    const grantBtn = document.getElementById('grant-all-btn');
-
-    // Show modal always on first open (user MUST allow)
-    if (modal) modal.classList.remove('hidden');
-
-    if (grantBtn) {
-        grantBtn.onclick = async () => {
-            grantBtn.disabled = true;
-            grantBtn.innerText = "Processing...";
 
             try {
-                // 1. Notifications
-                if (Notification.permission !== 'granted') {
-                    await Notification.requestPermission();
-                }
-
-                // 2. Mic & Camera
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-                stream.getTracks().forEach(track => track.stop());
-
-                console.log("All permissions granted.");
-                // Mark as done — never show again
-                localStorage.setItem('baatcheet_permissions_granted', 'true');
-                // Also register FCM push token
-                if (window.registerFCMToken) await window.registerFCMToken();
-                if (modal) modal.classList.add('hidden');
-            } catch (err) {
-                console.error("Permission request failed:", err);
-                grantBtn.disabled = false;
-                grantBtn.innerText = "Sari Permissions Dein (Allow)";
-                alert("Permissions Allow nahi hueen. Dobara koshish karein ya browser settings check karein.");
+                const profile = JSON.parse(raw);
+                mqttClient.unsubscribe(directoryTopic);
+                mqttClient.removeListener('message', directoryListener);
+                
+                // Add to Chat List
+                updateChatList(profile.id, profile.name, profile.avatar, "");
+                
+                // Reset UI & Open Chat
+                DOM.newContactIdInput.value = "";
+                DOM.saveContactBtn.innerText = "Save Contact";
+                DOM.saveContactBtn.disabled = false;
+                DOM.addContactModal.style.display = 'none';
+                
+                openChatView(profile.name, profile.id, profile.avatar);
+            } catch(e) {
+                console.error("Discovery parse error:", e);
             }
-        };
+        }
+    };
+    
+    mqttClient.on('message', directoryListener);
+    mqttClient.subscribe(directoryTopic);
+    
+    // Timeout after 3 seconds if account doesn't exist (no retained message)
+    setTimeout(() => {
+        if (!found) {
+            mqttClient.unsubscribe(directoryTopic);
+            mqttClient.removeListener('message', directoryListener);
+            alert("This account does not exist.");
+            DOM.saveContactBtn.innerText = "Save Contact";
+            DOM.saveContactBtn.disabled = false;
+        }
+    }, 4000);
+}
+
+// --- Search & Add Modal Listeners ---
+if (DOM.searchInput) {
+    DOM.searchInput.addEventListener('input', (e) => {
+        renderChatList(e.target.value);
+    });
+}
+
+if (DOM.openAddModalBtn) {
+    DOM.openAddModalBtn.onclick = () => {
+        DOM.addContactModal.style.display = 'flex';
+        DOM.newContactIdInput.focus();
+    };
+    DOM.cancelAddBtn.onclick = () => DOM.addContactModal.style.display = 'none';
+    DOM.saveContactBtn.onclick = startNewChat;
+}
+
+// --- Chat View & Messaging ---
+
+function openChatView(name, id, avatar, zoom, x, y) {
+    if (activeChatObj && mqttClient) {
+        // Unsubscribe from previous friend's status
+        mqttClient.unsubscribe(`mchat/status/${activeChatObj.id}`);
+    }
+
+    activeChatObj = { id, name, avatar, zoom, x, y };
+    document.getElementById('active-chat-name').innerText = name;
+    
+    // Status Reset
+    document.getElementById('header-status').innerText = "...";
+
+    const mini = document.getElementById('active-chat-avatar');
+    mini.src = avatar || createLetterAvatar(name);
+    mini.style.transform = `none`;
+    DOM.chatView.classList.add('open');
+    
+    // Logic: Mark incoming messages as seen and notify sender
+    const roomId = getChatRoomId(currentUser.id, id);
+    let stored = localStorage.getItem(roomId);
+    if (stored) {
+        let msgs = JSON.parse(stored);
+        let changed = false;
+        msgs.forEach(m => {
+            if (m.senderId !== currentUser.id && m.status !== "seen") {
+                m.status = "seen";
+                m.seenAt = Date.now();
+                changed = true;
+            }
+        });
+        if (changed) {
+            localStorage.setItem(roomId, JSON.stringify(msgs));
+            // Notify sender
+            const seenSignal = {
+                type: "MESSAGES_SEEN",
+                senderId: currentUser.id,
+                timestamp: Date.now()
+            };
+            mqttClient.publish(`mchat/inbox/${id}`, JSON.stringify(seenSignal));
+        }
+    }
+
+    renderLocalMessages();
+
+    // Subscribe to current friend's status
+    if (mqttClient) {
+        mqttClient.subscribe(`mchat/status/${id}`);
     }
 }
 
-// --- Socket Integration ---
-window.handleReceiveSocketMessage = function (data) {
-    console.log("Socket message received in app.js:", data);
-
-    // Agar active chat wahi hai jis ne message bheja, to foran dikhayein
-    if (activeChatData) {
-        const other = getOtherParticipant(activeChatData);
-        if (other && other.uid === data.senderId) {
-            // Hum snapshots use kar rahe hain, to Firestore khud hi UI update kar dega 
-            // jab backend se data aayega. Socket yahan sirf 'instant feel' ke liye hai.
-            console.log("Active chat alert: New message arrived!");
+// --- Background Clean-up for 24h Deletion ---
+function cleanupExpiredMessages() {
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    
+    // Check all chat rooms in localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('mchat_room_')) {
+            const data = localStorage.getItem(key);
+            try {
+                let msgs = JSON.parse(data);
+                let originalCount = msgs.length;
+                // Keep only messages that haven't been seen for 24h
+                msgs = msgs.filter(m => {
+                    if (m.status === "seen" && m.seenAt) {
+                        return (now - m.seenAt) < twentyFourHours;
+                    }
+                    return true;
+                });
+                
+                if (msgs.length !== originalCount) {
+                    if (msgs.length === 0) {
+                        localStorage.removeItem(key);
+                    } else {
+                        localStorage.setItem(key, JSON.stringify(msgs));
+                    }
+                }
+            } catch(e) {}
         }
     }
+}
+// Run periodically
+setInterval(cleanupExpiredMessages, 60000); // Every minute
+
+// --- Chat Closure and Auto-Delete Finalisation ---
+function closeActiveChatAndClear() {
+    if (!activeChatObj || !mqttClient) return;
+
+    const friendId = activeChatObj.id;
+    const roomId = getChatRoomId(currentUser.id, friendId);
+
+    // Get current messages to see if we reached 'Recipient' status
+    const msgs = JSON.parse(localStorage.getItem(roomId)) || [];
+    const hasReceived = msgs.some(m => m.senderId === friendId);
+
+    // 4. Reset View State (Always)
+    mqttClient.unsubscribe(`mchat/status/${friendId}`);
+    activeChatObj = null;
+    DOM.chatView.classList.remove('open');
+    renderChatList();
+}
+
+DOM.backBtn.onclick = () => {
+    closeActiveChatAndClear();
 };
+
+function getLocalMessages() {
+    if (!activeChatObj) return [];
+    const roomId = getChatRoomId(currentUser.id, activeChatObj.id);
+    const stored = localStorage.getItem(roomId);
+    return stored ? JSON.parse(stored) : [];
+}
+
+function saveLocalMessage(roomId, msgObj) {
+    let stored = localStorage.getItem(roomId);
+    let msgs = stored ? JSON.parse(stored) : [];
+    // Deduplication check
+    if (!msgs.find(m => m.msgId === msgObj.msgId)) {
+        msgs.push(msgObj);
+        localStorage.setItem(roomId, JSON.stringify(msgs));
+        return true;
+    }
+    return false;
+}
+
+function renderLocalMessages() {
+    if (!activeChatObj) return;
+    cleanupExpiredMessages(); // Purge old ones first
+    const msgs = getLocalMessages();
+    const container = document.getElementById('message-container');
+    container.innerHTML = "";
+    
+    msgs.forEach(m => {
+        appendSingleMessageUI(m, true);
+    });
+    container.scrollTop = container.scrollHeight;
+}
+
+function appendSystemMessage(text) {
+    const container = document.getElementById('message-container');
+    const div = document.createElement('div');
+    div.style.cssText = "text-align:center; padding:10px; font-size:0.8rem; color:var(--primary); opacity:0.8;";
+    div.innerText = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function appendSingleMessageUI(m, isBatch = false) {
+    const isSent = m.senderId === currentUser.id;
+    const container = document.getElementById('message-container');
+    
+    // Auto cleanup logic check inside render
+    if (m.type === "VOICE_EXPIRED") return;
+
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('message-wrapper', isSent ? 'sent' : 'received');
+    wrapper.id = m.msgId; // Anchor for scrolling to replies
+    
+    // Swipe Icon
+    const swipeIcon = document.createElement('div');
+    swipeIcon.classList.add('swipe-reply-icon');
+    swipeIcon.innerHTML = '↶';
+    wrapper.appendChild(swipeIcon);
+
+    const b = document.createElement('div');
+    b.classList.add('message', isSent ? 'sent' : 'received');
+    if (!isBatch) b.classList.add('fade-in');
+    
+    let contentHtml = "";
+    
+    // Add Reply Quote if exists
+    if (m.replyTo) {
+        contentHtml += `
+            <div class="reply-quote" onclick="scrollToMessage('${m.replyTo.msgId}')">
+                <div class="reply-quote-name">${m.replyTo.senderName}</div>
+                <div class="reply-quote-text">${m.replyTo.text || (m.replyTo.image ? "📷 Photo" : "")}</div>
+            </div>
+        `;
+    }
+
+    if (m.image) {
+        contentHtml += `<img src="${m.image}" style="width:100%; border-radius:8px; margin-bottom:5px; display:block;">`;
+    }
+    if (m.audio) {
+        contentHtml += `
+            <div class="voice-bubble" style="display:flex; align-items:center; gap:10px; padding:5px 0;">
+                <audio controls controlsList="nodownload" style="height:35px; width:200px;">
+                    <source src="${m.audio}" type="audio/webm">
+                </audio>
+            </div>
+        `;
+    }
+    
+    if (m.file) {
+        contentHtml += `
+            <div class="file-bubble" style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; margin-bottom: 5px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 12px;">
+                <div style="font-size: 1.5rem;">📄</div>
+                <div style="flex: 1; overflow: hidden;">
+                    <div style="font-size: 0.85rem; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; color: var(--primary);">${m.file.name}</div>
+                    <div style="font-size: 0.7rem; opacity: 0.6;">${(m.file.size / 1024).toFixed(1)} KB</div>
+                </div>
+                <a href="${m.file.data}" download="${m.file.name}" style="background: var(--primary); color: #000; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 1rem;">↓</a>
+            </div>
+        `;
+    }
+
+    if (m.text) {
+        contentHtml += `<div>${m.text}</div>`;
+    }
+    const timeStr = new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: true});
+    
+    // Status Ticks Logic: Sent (1 tick), Seen (2 blue ticks)
+    let statusHtml = "";
+    if (isSent) {
+        if (m.status === "seen") {
+            statusHtml = `<span class="message-status tick-seen" style="color: #081c15; font-weight: bold; font-size: 0.8rem; margin-left: 4px;">✓✓</span>`;
+        } else {
+            statusHtml = `<span class="message-status tick-sent" style="color: rgba(255,255,255,0.6); font-size: 0.8rem; margin-left: 4px;">✓</span>`;
+        }
+    }
+
+    b.innerHTML = `
+        ${contentHtml} 
+        <div style="display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top: 2px;">
+            <span class="message-time" style="font-size: 0.65rem; opacity: 0.7;">${timeStr}</span>
+            ${statusHtml}
+        </div>
+    `;
+
+    // Voice One-Time Logic
+    const voicePlayer = b.querySelector('audio');
+    if (voicePlayer && !isSent) {
+        voicePlayer.onended = () => {
+            const roomId = getChatRoomId(currentUser.id, m.senderId);
+            // 1. Send signal back to sender
+            const listenSignal = {
+                type: "VOICE_LISTENED",
+                senderId: currentUser.id,
+                msgId: m.msgId,
+                timestamp: Date.now()
+            };
+            mqttClient.publish(`mchat/inbox/${m.senderId}`, JSON.stringify(listenSignal));
+
+            // 2. Self destruct locally
+            removeSingleMessageLocally(roomId, m.msgId);
+            renderLocalMessages();
+        };
+    }
+    
+    // Add click listener to image for lightbox
+    const img = b.querySelector('img');
+    if (img) {
+        img.onclick = () => openLightbox(img.src);
+    }
+    
+    wrapper.appendChild(b);
+    container.appendChild(wrapper);
+
+    // Swipe For Mobile
+    initSwipe(b, m);
+    
+    // Right Click for Laptop/Desktop
+    b.oncontextmenu = (e) => {
+        e.preventDefault();
+        openContextMenu(e, m);
+    };
+
+    // Long Press for Mobile -> Direct Delete Modal
+    initLongPress(b, m, openDeleteModalMobile);
+
+    if (!isBatch) container.scrollTop = container.scrollHeight;
+}
+
+function openContextMenu(e, msgObj) {
+    e.preventDefault();
+    msgToDeleteObj = msgObj;
+    
+    const x = e.clientX || (e.touches && e.touches[0].clientX) || window.innerWidth / 2;
+    const y = e.clientY || (e.touches && e.touches[0].clientY) || window.innerHeight / 2;
+    
+    DOM.msgContextMenu.style.display = 'block';
+    
+    // Prevent menu from overflowing bounds
+    const rect = DOM.msgContextMenu.getBoundingClientRect();
+    let finalX = x;
+    let finalY = y;
+    
+    if (x + rect.width > window.innerWidth) finalX = window.innerWidth - rect.width - 10;
+    if (y + rect.height > window.innerHeight) finalY = window.innerHeight - rect.height - 10;
+    
+    DOM.msgContextMenu.style.left = finalX + 'px';
+    DOM.msgContextMenu.style.top = finalY + 'px';
+    
+    if (window.navigator.vibrate) window.navigator.vibrate(20);
+}
+
+// Close context menu on outside click
+document.addEventListener('click', (e) => {
+    if (DOM.msgContextMenu && DOM.msgContextMenu.style.display === 'block') {
+        DOM.msgContextMenu.style.display = 'none';
+    }
+});
+document.addEventListener('scroll', () => {
+    if (DOM.msgContextMenu) DOM.msgContextMenu.style.display = 'none';
+}, true);
+
+// Context Menu Bindings
+DOM.ctxReplyBtn.onclick = (e) => {
+    DOM.msgContextMenu.style.display = 'none';
+    if (msgToDeleteObj) showReplyPreview(msgToDeleteObj);
+};
+
+DOM.ctxDeleteBtn.onclick = (e) => {
+    DOM.msgContextMenu.style.display = 'none';
+    if (!msgToDeleteObj) return;
+    openDeleteModalMobile(e, msgToDeleteObj); // Use new logic for both right click delete option and long press
+};
+
+function openDeleteModalMobile(e, msgObj) {
+    if(e && e.preventDefault) e.preventDefault();
+    msgToDeleteObj = msgObj;
+    DOM.msgContextMenu.style.display = 'none';
+
+    if (msgObj.senderId === currentUser.id) {
+        DOM.deleteEveryoneBtn.style.display = 'block';
+    } else {
+        DOM.deleteEveryoneBtn.style.display = 'none';
+    }
+    
+    DOM.msgDeleteModal.style.display = 'flex';
+    if (window.navigator.vibrate) window.navigator.vibrate(20);
+}
+
+function initLongPress(el, msgObj, callback) {
+    let timer;
+    const duration = 600;
+
+    const start = (e) => {
+        timer = setTimeout(() => {
+            if (callback) callback(e, msgObj);
+        }, duration);
+    };
+
+    const cancel = () => {
+        clearTimeout(timer);
+    };
+
+    el.addEventListener('touchstart', start, {passive: true});
+    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchmove', cancel);
+}
+
+// Delete Modal Buttons
+if(DOM.cancelMsgDelete) DOM.cancelMsgDelete.onclick = () => DOM.msgDeleteModal.style.display = 'none';
+
+if(DOM.deleteEveryoneBtn) DOM.deleteEveryoneBtn.onclick = () => {
+    if (msgToDeleteObj && mqttClient) {
+        const deletePayload = {
+            type: "DELETE_SINGLE_MSG",
+            msgId: msgToDeleteObj.msgId,
+            friendId: currentUser.id, // who sent it
+            roomId: getChatRoomId(currentUser.id, activeChatObj.id)
+        };
+        mqttClient.publish(`mchat/inbox/${activeChatObj.id}`, JSON.stringify(deletePayload));
+        
+        // Remove locally too
+        deleteForMeLocally(msgToDeleteObj);
+    }
+    DOM.msgDeleteModal.style.display = 'none';
+};
+
+if(DOM.deleteForMeBtn) DOM.deleteForMeBtn.onclick = () => {
+    if (msgToDeleteObj) {
+        deleteForMeLocally(msgToDeleteObj);
+    }
+    DOM.msgDeleteModal.style.display = 'none';
+};
+
+function deleteForMeLocally(msgObj) {
+    const roomId = getChatRoomId(currentUser.id, activeChatObj.id);
+    removeSingleMessageLocally(roomId, msgObj.msgId);
+    renderLocalMessages();
+}
+
+function removeSingleMessageLocally(roomId, msgId) {
+    let msgs = JSON.parse(localStorage.getItem(roomId)) || [];
+    msgs = msgs.filter(m => m.msgId !== msgId);
+    localStorage.setItem(roomId, JSON.stringify(msgs));
+}
+
+function initSwipe(el, msgObj) {
+    let startX = 0;
+    let dist = 0;
+    const threshold = 60;
+
+    el.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        el.style.transition = 'none';
+        el.classList.add('swiping-right');
+    }, {passive: true});
+
+    el.addEventListener('touchmove', (e) => {
+        const currentX = e.touches[0].clientX;
+        dist = currentX - startX;
+        if (dist > 0 && dist < 100) {
+            el.style.transform = `translateX(${dist}px)`;
+            // Provide haptic feedback if reached threshold
+            if (dist >= threshold && !el.dataset.triggered) {
+                if (window.navigator.vibrate) window.navigator.vibrate(10);
+                el.dataset.triggered = "true";
+            }
+        }
+    }, {passive: true});
+
+    el.addEventListener('touchend', () => {
+        el.style.transition = 'transform 0.2s ease';
+        el.style.transform = 'translateX(0px)';
+        el.classList.remove('swiping-right');
+        
+        if (dist >= threshold) {
+            showReplyPreview(msgObj);
+        }
+        dist = 0;
+        el.dataset.triggered = "";
+    });
+}
+
+function showReplyPreview(m) {
+    replyToMsgObj = m;
+    DOM.replyName.innerText = m.senderId === currentUser.id ? "You" : m.senderName;
+    DOM.replyText.innerText = m.text || (m.image ? "📷 Photo" : "");
+    DOM.replyArea.style.display = "block";
+    document.getElementById('message-input').focus();
+}
+
+DOM.closeReplyBtn.onclick = () => {
+    replyToMsgObj = null;
+    DOM.replyArea.style.display = "none";
+};
+function handleInboxMessage(payload) {
+    if (!payload || !payload.senderId) return;
+
+    // Guard: Don't process non-message signals as standard messages
+    const signalTypes = ["READ_RECEIPT", "CHAT_CLOSED_DELETE", "DELETE_SINGLE_MSG", "MESSAGES_SEEN", "VOICE_LISTENED"];
+    if (payload.type && signalTypes.includes(payload.type)) return;
+
+    const roomId = getChatRoomId(currentUser.id, payload.senderId);
+    
+    // Handle Profile Update Signal
+    if (payload.type === "PROFILE_UPDATE") {
+        updateChatList(payload.id, payload.name, payload.avatar);
+        // If viewing this chat, update the header live
+        if (activeChatObj && activeChatObj.id === payload.id) {
+            document.getElementById('active-chat-name').innerText = payload.name;
+            const mini = document.getElementById('active-chat-avatar');
+            mini.src = payload.avatar || createLetterAvatar(payload.name);
+            mini.style.transform = `none`;
+            // Update active object state too
+            activeChatObj.name = payload.name;
+            activeChatObj.avatar = payload.avatar;
+        }
+        return;
+    }
+
+    // Handle Delete History Signal
+    if (payload.type === "DELETE_HISTORY") {
+        const friendRoomId = getChatRoomId(currentUser.id, payload.senderId);
+        localStorage.removeItem(friendRoomId);
+        // Clear last message in chat list too
+        updateChatList(payload.senderId, payload.senderName, payload.senderAvatar, "Chat history cleared");
+        // If viewing this chat, re-render
+        if (activeChatObj && activeChatObj.id === payload.senderId) {
+            document.getElementById('active-chat-name').innerText = payload.senderName;
+            const mini = document.getElementById('active-chat-avatar');
+            mini.src = payload.senderAvatar || createLetterAvatar(payload.senderName);
+            mini.style.transform = `none`;
+            renderLocalMessages();
+        }
+        return;
+    }
+
+    // Save to device message history
+    if (saveLocalMessage(roomId, payload)) {
+        
+        // WhatsApp Logic: Update chat list preview
+        const previewText = payload.image ? "📷 Photo" : payload.text;
+        
+        // Track unread if not currently looking at this chat
+        const isNotActive = !activeChatObj || activeChatObj.id !== payload.senderId;
+        const currentUnread = (chatList[payload.senderId]?.unread || 0) + (isNotActive ? 1 : 0);
+        
+        updateChatList(payload.senderId, payload.senderName, payload.senderAvatar, previewText);
+        chatList[payload.senderId].unread = currentUnread;
+        saveChatList();
+        renderChatList();
+
+        // Notification Sound
+        if (isNotActive) {
+            new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3').play().catch(()=>{});
+        }
+        
+        // If we are currently actively looking at their chat, render the bubble
+        if (activeChatObj && activeChatObj.id === payload.senderId) {
+            // Instantly mark as seen because the user is already looking at the chat
+            payload.status = "seen";
+            payload.seenAt = Date.now();
+            
+            // Re-save the updated status
+            let roomId = getChatRoomId(currentUser.id, payload.senderId);
+            let stored = JSON.parse(localStorage.getItem(roomId));
+            let msgToUpdate = stored.find(m => m.msgId === payload.msgId);
+            if (msgToUpdate) {
+                msgToUpdate.status = "seen";
+                msgToUpdate.seenAt = payload.seenAt;
+                localStorage.setItem(roomId, JSON.stringify(stored));
+            }
+
+            // Immediately notify sender
+            const seenSignal = {
+                type: "MESSAGES_SEEN",
+                senderId: currentUser.id,
+                timestamp: Date.now()
+            };
+            mqttClient.publish(`mchat/inbox/${payload.senderId}`, JSON.stringify(seenSignal));
+
+            // Update the live header name/avatar if they changed
+            document.getElementById('active-chat-name').innerText = payload.senderName;
+            const mini = document.getElementById('active-chat-avatar');
+            mini.src = payload.senderAvatar || createLetterAvatar(payload.senderName);
+            mini.style.transform = `none`;
+            
+            appendSingleMessageUI(payload);
+        }
+    }
+}
+
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('message-input').addEventListener('keypress', (e) => {
+    if(e.key === 'Enter') sendMessage();
+});
+
+// --- Paste Image Support ---
+document.getElementById('message-input').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                pendingImage = event.target.result;
+                DOM.imagePreviewImg.src = pendingImage;
+                DOM.imagePreviewArea.style.display = "block";
+                toggleInputButtons();
+            };
+            reader.readAsDataURL(blob);
+        }
+    }
+});
+
+// --- Chat File Handling Logic ---
+let pendingImage = null;
+let pendingFile = null; // To hold non-image files (like APKs)
+
+DOM.attachBtn.onclick = () => DOM.chatFileInput.click();
+DOM.chatFileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const data = event.target.result;
+        
+        // Image logic
+        if (file.type.startsWith('image/')) {
+            pendingImage = data;
+            pendingFile = null;
+            DOM.imagePreviewImg.src = data;
+        } else {
+            // Document/Generic file logic
+            pendingFile = {
+                name: file.name,
+                type: file.type,
+                data: data,
+                size: file.size
+            };
+            pendingImage = null;
+            // Use a generic file icon for preview
+            DOM.imagePreviewImg.src = "https://cdn-icons-png.flaticon.com/512/2991/2991108.png";
+        }
+        
+        DOM.imagePreviewArea.style.display = "block";
+        toggleInputButtons();
+    };
+    reader.readAsDataURL(file);
+};
+
+DOM.closePreviewBtn.onclick = () => {
+    pendingImage = null;
+    pendingFile = null;
+    DOM.imagePreviewArea.style.display = "none";
+    DOM.chatFileInput.value = "";
+    toggleInputButtons();
+};
+
+// --- Image Compression Utility ---
+async function compressImage(base64Str, maxWidth = 800, quality = 0.7) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+    });
+}
+
+async function sendMessage() {
+    const input = document.getElementById('message-input');
+    const text = input.value.trim();
+    
+    if(!text && !pendingImage && !pendingFile) return; 
+    if(!activeChatObj || !mqttClient) return;
+
+    // Check if we are blocked by this user
+    if (blockedByList.includes(activeChatObj.id)) {
+        DOM.blockAlertModal.style.display = 'flex';
+        return;
+    }
+
+    input.value = ""; 
+    const currentPendingImage = pendingImage; // Capture it
+    const currentPendingFile = pendingFile; // Capture it
+    const currentReplyTo = replyToMsgObj; // Capture it
+    
+    pendingImage = null;
+    pendingFile = null;
+    replyToMsgObj = null;
+    DOM.imagePreviewArea.style.display = "none";
+    DOM.replyArea.style.display = "none";
+    DOM.chatFileInput.value = "";
+    
+    // Reset buttons to default based on value/image
+    toggleInputButtons();
+    
+    let processedImage = null;
+    if (currentPendingImage) {
+        processedImage = await compressImage(currentPendingImage);
+    }
+    
+    const roomId = getChatRoomId(currentUser.id, activeChatObj.id);
+    
+    const msgPayload = {
+        msgId: 'msg_' + Math.random().toString(36).substr(2, 9),
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        senderAvatarZoom: currentUser.avatarZoom || 1.7,
+        senderAvatarX: currentUser.avatarX || 0,
+        senderAvatarY: currentUser.avatarY || 0,
+        text: text,
+        image: processedImage, 
+        file: currentPendingFile, // Name, Type, and Data
+        replyTo: currentReplyTo ? {
+            msgId: currentReplyTo.msgId,
+            senderName: currentReplyTo.senderName,
+            text: currentReplyTo.text,
+            image: currentReplyTo.image
+        } : null,
+        timestamp: Date.now(),
+        status: "sent" // Initial status: Single Tick
+    };
+    
+    if (saveLocalMessage(roomId, msgPayload)) {
+        appendSingleMessageUI(msgPayload);
+        const previewText = msgPayload.image ? "📷 Photo" : (msgPayload.file ? `📄 ${msgPayload.file.name}` : msgPayload.text);
+        updateChatList(activeChatObj.id, activeChatObj.name, activeChatObj.avatar, previewText, activeChatObj.avatarZoom, activeChatObj.avatarX, activeChatObj.avatarY);
+    }
+    
+    mqttClient.publish(`mchat/inbox/${activeChatObj.id}`, JSON.stringify(msgPayload), { qos: 1 });
+}
+
+// --- Settings & Profile Logic ---
+
+if (DOM.settingsBtn) {
+    // --- Hard Refresh ---
+    const hardRefreshBtn = document.getElementById('hard-refresh-btn');
+    if (hardRefreshBtn) {
+        hardRefreshBtn.addEventListener('click', () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    for (let registration of registrations) {
+                        registration.unregister();
+                    }
+                    // Clear caches if supported
+                    if ('caches' in window) {
+                        caches.keys().then(names => {
+                            for (let name of names) caches.delete(name);
+                        });
+                    }
+                    setTimeout(() => {
+                        window.location.reload(true);
+                    }, 500);
+                });
+            } else {
+                window.location.reload(true);
+            }
+        });
+    }
+
+    DOM.settingsBtn.addEventListener('click', () => {
+        DOM.settingsDropdown.style.display = DOM.settingsDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // Click outside to close generic dropdowns
+    document.addEventListener('click', (e) => {
+        if (!DOM.settingsBtn.contains(e.target) && !DOM.settingsDropdown.contains(e.target)) {
+            DOM.settingsDropdown.style.display = 'none';
+        }
+    });
+
+    // --- Share App ---
+    if (DOM.shareAppBtn) {
+        DOM.shareAppBtn.addEventListener('click', async () => {
+            DOM.settingsDropdown.style.display = 'none';
+            const shareData = {
+                title: 'M-Chat',
+                text: 'Fast, secure, and beautiful messaging. Join me on M-Chat!',
+                url: 'https://royal-fragrance-2.vercel.app/'
+            };
+
+            try {
+                if (navigator.share) {
+                    await navigator.share(shareData);
+                } else {
+                    navigator.clipboard.writeText(shareData.url);
+                    alert("App link copied to clipboard! You can now paste and send it to your friends.");
+                }
+            } catch (err) {
+                console.log('Error sharing: ', err);
+            }
+        });
+    }
+
+    // --- Delete Account ---
+    DOM.deleteAccountBtn.addEventListener('click', () => {
+        DOM.settingsDropdown.style.display = 'none';
+        DOM.deleteModal.style.display = 'flex';
+    });
+
+    DOM.cancelDeleteBtn.addEventListener('click', () => {
+        DOM.deleteModal.style.display = 'none';
+    });
+
+    DOM.confirmDeleteBtn.addEventListener('click', () => {
+        DOM.deleteModal.style.display = 'none';
+        
+        // 1. Remove self from global directory and status before disconnecting
+        if(mqttClient && currentUser) {
+            mqttClient.publish(`mchat/directory/${currentUser.id}`, "", { retain: true }); 
+            mqttClient.publish(`mchat/status/${currentUser.id}`, "", { retain: true }); 
+        }
+
+        // 2. Clear all local state
+        currentUser = null;
+        chatList = {};
+        activeChatObj = null;
+        generatedAvatarUrl = null;
+        localStorage.clear(); 
+        
+        // 3. Disconnect MQTT
+        if (mqttClient) {
+            mqttClient.end();
+            mqttClient = null;
+        }
+        
+        // 4. Reset Onboarding UI
+        DOM.nameInput.value = "";
+        DOM.displayId.innerText = "0200000000";
+        DOM.generateBtn.disabled = false;
+        DOM.generateBtn.innerText = "Generate Account";
+        DOM.generateBtn.style.opacity = '1';
+        DOM.statusMsg.innerText = '';
+        
+        // 5. Back to start
+        showScreen('onboarding');
+    });
+
+    // --- Block List UI ---
+    DOM.blockListBtn.onclick = () => {
+        DOM.settingsDropdown.style.display = 'none';
+        renderBlockList();
+        DOM.blockListModal.style.display = 'flex';
+    };
+
+    DOM.closeBlockListBtn.onclick = () => {
+        DOM.blockListModal.style.display = 'none';
+    };
+
+    DOM.blockAlertModal.onclick = () => {
+        DOM.blockAlertModal.style.display = 'none';
+    };
+    
+    function renderBlockList() {
+        DOM.blockedItemsContainer.innerHTML = '';
+        if (blockList.length === 0) {
+            DOM.blockedItemsContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-dim);">No blocked contacts.</div>';
+            return;
+        }
+        
+        blockList.forEach(blockedId => {
+            const chatObj = chatList[blockedId];
+            const name = chatObj ? chatObj.name : 'Unknown User';
+            const avatar = chatObj ? chatObj.avatar : createLetterAvatar(blockedId);
+            
+            const div = document.createElement('div');
+            div.style.cssText = "display:flex; align-items:center; padding:10px; border-bottom:1px solid rgba(255,255,255,0.05);";
+            
+            div.innerHTML = `
+                <img src="${avatar}" style="width:40px; height:40px; border-radius:50%; margin-right:15px; object-fit:cover;">
+                <div style="flex:1;">
+                    <div style="font-weight:bold;">${name}</div>
+                    <div style="font-size:0.75rem; color:var(--text-dim);">${blockedId}</div>
+                </div>
+            `;
+            
+            div.oncontextmenu = (e) => {
+                e.preventDefault();
+                contactToActObj = { id: blockedId }; 
+                
+                const x = e.clientX || (e.touches && e.touches[0].clientX) || window.innerWidth / 2;
+                const y = e.clientY || (e.touches && e.touches[0].clientY) || window.innerHeight / 2;
+                
+                DOM.blockedContextMenu.style.display = 'block';
+                DOM.contactContextMenu.style.display = 'none';
+                
+                const rect = DOM.blockedContextMenu.getBoundingClientRect();
+                let finalX = x; let finalY = y;
+                if (x + rect.width > window.innerWidth) finalX = window.innerWidth - rect.width - 10;
+                if (y + rect.height > window.innerHeight) finalY = window.innerHeight - rect.height - 10;
+                
+                DOM.blockedContextMenu.style.left = finalX + 'px';
+                DOM.blockedContextMenu.style.top = finalY + 'px';
+                
+                if (window.navigator.vibrate) window.navigator.vibrate(20);
+            };
+            
+            initLongPress(div, { id: blockedId }, div.oncontextmenu);
+            DOM.blockedItemsContainer.appendChild(div);
+        });
+    }
+
+    // Block List Context Actions
+    if (DOM.ctxUnblockBtn) DOM.ctxUnblockBtn.onclick = () => {
+        DOM.blockedContextMenu.style.display = 'none';
+        if (contactToActObj) {
+            blockList = blockList.filter(id => id !== contactToActObj.id);
+            saveBlockList();
+            renderBlockList();
+            renderChatList(); // Will show up in chat list again
+        }
+    };
+
+    if (DOM.ctxBlockedDeleteBtn) DOM.ctxBlockedDeleteBtn.onclick = () => {
+        DOM.blockedContextMenu.style.display = 'none';
+        if (contactToActObj) {
+            blockList = blockList.filter(id => id !== contactToActObj.id);
+            saveBlockList();
+            if (chatList[contactToActObj.id]) delete chatList[contactToActObj.id];
+            saveChatList();
+            renderBlockList();
+            renderChatList();
+        }
+    };
+
+    // --- Edit Profile ---
+    DOM.editProfileBtn.addEventListener('click', () => {
+        DOM.settingsDropdown.style.display = 'none';
+        if (currentUser) {
+            DOM.editNameInput.value = currentUser.name;
+            DOM.editAvatarPreviewImg.src = currentUser.avatar;
+            DOM.editAvatarPreviewImg.dataset.newUrl = "";
+            
+            // Set sliders from current user data
+            currentZoom = currentUser.avatarZoom || 1.7;
+            currentX = currentUser.avatarX || 0;
+            currentY = currentUser.avatarY || 0;
+            DOM.editZoomSlider.value = currentZoom;
+            DOM.editXSlider.value = currentX;
+            DOM.editYSlider.value = currentY;
+            applyAvatarAdjustments();
+            
+            DOM.editProfileModal.style.display = 'flex';
+        }
+    });
+
+    DOM.cancelEditBtn.addEventListener('click', () => {
+        DOM.editProfileModal.style.display = 'none';
+    });
+
+    DOM.saveEditBtn.addEventListener('click', () => {
+        const newName = DOM.editNameInput.value.trim();
+        if (!newName) return alert("Name cannot be empty.");
+        
+        currentUser.name = newName;
+        currentUser.avatar = createLetterAvatar(newName); 
+        
+        // Save locally
+        localStorage.setItem('mchat_currentUser', JSON.stringify(currentUser));
+        
+        // Update UI Header
+        DOM.myNameDisplay.innerText = currentUser.name;
+        DOM.myAvatar.src = currentUser.avatar;
+        DOM.myAvatar.style.transform = `none`;
+        
+        // Republish to global directory with retain
+        if (mqttClient) {
+            const profilePayload = {
+                type: "PROFILE_UPDATE",
+                id: currentUser.id,
+                name: currentUser.name,
+                avatar: currentUser.avatar
+            };
+            
+            const profileStr = JSON.stringify(profilePayload);
+            mqttClient.publish(`mchat/directory/${currentUser.id}`, profileStr, { retain: true });
+            
+            // Push update to friends
+            Object.keys(chatList).forEach(friendId => {
+                mqttClient.publish(`mchat/inbox/${friendId}`, profileStr);
+            });
+        }
+        
+        DOM.editProfileModal.style.display = 'none';
+    });
+}
+
+// --- Presence & Online Status ---
+
+function updateStatus(status) {
+    if (!mqttClient || !currentUser) return;
+    const topic = `mchat/status/${currentUser.id}`;
+    const payload = { status: status };
+    if (status === "offline") payload.lastSeen = Date.now();
+    
+    mqttClient.publish(topic, JSON.stringify(payload), { retain: true, qos: 1 });
+}
+
+function updateStatusUI(payload) {
+    const statusEl = document.getElementById('header-status');
+    if (!statusEl) return;
+
+    if (payload.status === "online") {
+        statusEl.innerText = "online";
+        statusEl.style.color = "#4fb087"; // Primary green
+    } else {
+        const lastSeen = payload.lastSeen || Date.now();
+        const timeDiff = Date.now() - lastSeen;
+        
+        // Simple "last seen" formatting
+        const timeStr = new Date(lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        if (timeDiff < 24 * 3600 * 1000) {
+            statusEl.innerText = `last seen today at ${timeStr}`;
+        } else {
+            const dateStr = new Date(lastSeen).toLocaleDateString();
+            statusEl.innerText = `last seen on ${dateStr}`;
+        }
+        statusEl.style.color = "var(--text-dim)";
+    }
+}
+
+// Track when user leaves app
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        updateStatus("online");
+    } else {
+        updateStatus("offline");
+        // Automated closure on tab-hide removed as per user request to avoid accidental deletion
+    }
+});
+
+window.addEventListener('pagehide', () => {
+    updateStatus("offline");
+});
+
+function scrollToMessage(msgId) {
+    const el = document.getElementById(msgId);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.backgroundColor = 'rgba(79, 176, 135, 0.2)';
+        setTimeout(() => {
+            el.style.backgroundColor = 'transparent';
+        }, 1500);
+    }
+}
+
+// --- Voice Message Logic (Hold & Record) ---
+let mediaRecorder;
+let audioChunks = [];
+let recordingStartTime;
+let isRecCancelled = false;
+let startRecX = 0;
+
+function toggleInputButtons() {
+    if (DOM.messageInput.value.trim().length > 0 || pendingImage || pendingFile) {
+        DOM.micBtn.style.display = 'none';
+        DOM.sendBtn.style.display = 'flex';
+    } else {
+        DOM.micBtn.style.display = 'flex';
+        DOM.sendBtn.style.display = 'none';
+    }
+}
+
+function initVoiceUI() {
+    DOM.messageInput.addEventListener('input', toggleInputButtons);
+
+    // Recording Bindings
+    DOM.micBtn.onmousedown = DOM.micBtn.ontouchstart = (e) => {
+        e.preventDefault();
+        startRecording(e);
+    };
+
+    window.onmousemove = window.ontouchmove = (e) => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            const x = e.clientX || e.touches[0].clientX;
+            if (Math.abs(x - startRecX) > 80) {
+                isRecCancelled = true;
+                stopRecording();
+            }
+        }
+    };
+
+    window.onmouseup = window.ontouchend = (e) => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            stopRecording();
+        }
+    };
+}
+
+async function startRecording(e) {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } 
+        });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        isRecCancelled = false;
+        startRecX = e.clientX || e.touches[0].clientX;
+        
+        mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+        mediaRecorder.onstop = handleRecordingStop;
+        
+        mediaRecorder.start();
+        DOM.micBtn.classList.add('active');
+        DOM.recordingOverlay.style.display = 'flex';
+        recordingStartTime = Date.now();
+    } catch (err) {
+        alert("Camera/Mic permission needed for voice messages.");
+    }
+}
+
+function stopRecording() {
+    if (mediaRecorder) mediaRecorder.stop();
+}
+
+function handleRecordingStop() {
+    DOM.micBtn.classList.remove('active');
+    DOM.recordingOverlay.style.display = 'none';
+    
+    if (isRecCancelled) {
+        console.log("Recording cancelled.");
+        return;
+    }
+
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    const reader = new FileReader();
+    reader.readAsDataURL(audioBlob);
+    reader.onloadend = () => {
+        const base64Audio = reader.result;
+        // Check size (HiveMQ 256KB limit)
+        if (base64Audio.length > 200000) {
+            return alert("Voice message too long! Please keep it under 10 seconds.");
+        }
+        sendVoiceMessage(base64Audio);
+    };
+}
+
+function sendVoiceMessage(audioData) {
+    if (!activeChatObj || !mqttClient) return;
+
+    // Check if we are blocked by this user
+    if (blockedByList.includes(activeChatObj.id)) {
+        DOM.blockAlertModal.style.display = 'flex';
+        return;
+    }
+
+    const roomId = getChatRoomId(currentUser.id, activeChatObj.id);
+    const msgPayload = {
+        msgId: 'msg_' + Date.now() + Math.random().toString(16).substr(2, 4),
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        status: "sent",
+        timestamp: Date.now(),
+        audio: audioData
+    };
+
+    if (saveLocalMessage(roomId, msgPayload)) {
+        appendSingleMessageUI(msgPayload);
+        mqttClient.publish(`mchat/inbox/${activeChatObj.id}`, JSON.stringify(msgPayload), { qos: 1 });
+        updateChatList(activeChatObj.id, activeChatObj.name, activeChatObj.avatar, "🎤 Voice Message");
+    }
+}
+
+// Let's go!
+checkPermissionModal();
+initVoiceUI();
+window.addEventListener('DOMContentLoaded', initApp);
+
+function checkPermissionModal() {
+    const prompted = localStorage.getItem('mchat_notif_prompted');
+    if (!prompted && Notification.permission !== 'granted') {
+        setTimeout(() => {
+            DOM.permissionModal.style.display = 'flex';
+        }, 1500);
+    }
+}
+
+DOM.allowNotifBtn.onclick = () => {
+    Notification.requestPermission().then(permission => {
+        DOM.permissionModal.style.display = 'none'; // Always hide it now
+        if (permission === 'granted') {
+            localStorage.setItem('mchat_notif_prompted', 'true');
+            new Notification("M-Chat", { body: "Notifications enabled successfully!", icon: "./icons/icon-192x192.png" });
+        } else {
+            // Save prompt block so they aren't bothered forever
+            localStorage.setItem('mchat_notif_prompted', 'true');
+            alert("M-Chat requires notifications to work in the background. Please allow them in your browser/site settings if you change your mind.");
+        }
+    });
+};
+
+if (DOM.skipNotifBtn) {
+    DOM.skipNotifBtn.onclick = () => {
+        localStorage.setItem('mchat_notif_prompted', 'true');
+        DOM.permissionModal.style.display = 'none';
+    };
+}
+
+function showLocalNotification(senderName, text, avatar) {
+    if (Notification.permission === 'granted') {
+        const options = {
+            body: text,
+            icon: avatar || "./icons/icon-192x192.png",
+            badge: "./icons/icon-192x192.png",
+            timestamp: Date.now(),
+            vibrate: [200, 100, 200],
+            data: { url: window.location.href }
+        };
+        
+        // Use Service Worker if available for better background behavior
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(senderName, options);
+            });
+        } else {
+            new Notification(senderName, options);
+        }
+    }
+}

@@ -1,21 +1,38 @@
 {
-  "name": "Hisab Kitab - Business Accounting",
-  "short_name": "Hisab Kitab",
-  "description": "Premium Business Accounting App",
+  "name": "M-Chat",
+  "short_name": "M-Chat",
+  "id": ".",
+  "scope": ".",
+  "description": "A premium, fast, and secure messaging application.",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#F59E0B",
+  "background_color": "#000000",
+  "theme_color": "#4fb087",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "icon.png",
+      "src": "assets/logo.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icon.png",
+      "src": "assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/logo.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
